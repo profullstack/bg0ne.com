@@ -42,7 +42,7 @@ RUN pip install --no-cache-dir -r /app/infer/requirements.txt
 # up at boot. Both baked models are permissively licensed (Apache-2.0); BiRefNet is
 # MIT and better, but it is roughly a gigabyte and is fetched on demand instead --
 # set INFER_HD_MODEL=birefnet-general once there is a GPU under this.
-ARG BAKE_MODELS="u2net isnet-general-use"
+ARG BAKE_MODELS="u2net birefnet-general-lite"
 RUN mkdir -p /app/models && \
     BAKE="$BAKE_MODELS" python3 -c "import os; from rembg import new_session; [new_session(m) for m in os.environ['BAKE'].split()]" \
     && ls -lh /app/models

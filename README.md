@@ -28,16 +28,19 @@ for and a non-commercial model would poison that.
 | Model | License | Role |
 |---|---|---|
 | `u2net` | Apache-2.0 | preview tier, baked into the image |
-| `isnet-general-use` | Apache-2.0 | paid tier, baked into the image |
+| `birefnet-general-lite` | MIT | paid tier, baked into the image |
 | `birefnet-general` | MIT | best quality, ~1GB, fetched on demand |
 | `birefnet-portrait` | MIT | portraits, fetched on demand |
+| `isnet-general-use` | Apache-2.0 | available, fetched on demand |
 
-BRIA's RMBG-2.0 is the obvious better-known choice and is **deliberately absent**: its
+BRIA's RMBG is the obvious better-known choice and is **deliberately absent**. Its
 weights are CC BY-NC 4.0 and commercial use requires a paid agreement with BRIA.
+rembg will happily serve it under the name `bria-rmbg`, so the model allowlist in
+`infer/server.py` is what actually keeps it out of a billed service. That allowlist is
+load bearing, not decoration.
 
-BiRefNet is the best of these and wants a GPU to be worth the wait, so the default
-paid model is ISNet until there is one. Set `INFER_HD_MODEL=birefnet-general` to
-switch.
+The full `birefnet-general` is better again but is roughly a gigabyte and wants a GPU
+to be worth the wait. Set `INFER_HD_MODEL=birefnet-general` once there is one.
 
 ## Run it
 

@@ -1,8 +1,10 @@
-# Pinned, because an unpinned onnxruntime is how a container that worked last week
-# stops fitting in its memory limit without a single line of our code changing.
-rembg==2.0.59
-onnxruntime==1.20.1
+# Pinned. An unpinned onnxruntime is how a container that worked last week stops
+# fitting in its memory limit without a line of our code changing.
+#
+# rembg caps at >=3.11 and the base image ships Python 3.13, so 2.0.85 is the floor
+# here rather than a preference: every 2.0.x below 2.0.62 declares Requires-Python
+# <3.13 and pip refuses it outright.
+rembg[cpu]==2.0.85
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 python-multipart==0.0.20
-pillow==11.1.0

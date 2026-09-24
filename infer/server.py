@@ -35,9 +35,15 @@ ALLOWED_MODELS = {
     "u2netp": "U-2-Net lite, Apache-2.0. Faster, visibly rougher on hair.",
     "u2net_human_seg": "U-2-Net human segmentation, Apache-2.0.",
     "isnet-general-use": "ISNet/DIS, Apache-2.0.",
-    "birefnet-general": "BiRefNet, MIT. Best edges, slowest on CPU.",
+    "birefnet-general-lite": "BiRefNet lite, MIT. The paid tier: BiRefNet edges, bakeable size.",
+    "birefnet-general": "BiRefNet full, MIT. Best edges, ~1GB, wants a GPU.",
     "birefnet-portrait": "BiRefNet portrait, MIT.",
 }
+
+# Deliberately NOT here, though rembg offers it: "bria-rmbg". Its weights are
+# CC BY-NC 4.0 and commercial use needs a paid agreement with BRIA. This service is
+# billed for, so the allowlist is what keeps a non-commercial model from being reached
+# by a caller simply naming it.
 
 MAX_BYTES = int(os.environ.get("INFER_MAX_BYTES", 25 * 1024 * 1024))
 MAX_EDGE = int(os.environ.get("INFER_MAX_EDGE", 4096))

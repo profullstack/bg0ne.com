@@ -8,6 +8,7 @@ import { createGateway } from '@profullstack/x402-gateway';
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { throttle } from '@profullstack/throttle/hono';
+import { decideTier } from './lib/tier.js';
 import { Account, Landing, Pricing, SignIn, Sent, NotFound, Docs } from './views/pages.js';
 
 export const app = new Hono();
@@ -176,33 +177,30 @@ app.post('/api/cutout', async (c) => {
   // A live x402 pass means this request is already paid for. The gateway put it there.
   const paidAgent = Boolean(c.req.header('x-crawl-pass') || c.req.header('x-payment'));
 
-  let tier = 'preview';
+  // Only spend if full resolution is actually on the table; a spend for a caller who
+  // was going to get a preview anyway is a charge for nothing.
   let spend = null;
+  if (asked !== 'preview' && !paidAgent && user) {
+    spend = await q.spendCredits({ userId: user.id, cost: 1, reason: 'cutout' });
+  }
 
-  if (asked !== 'preview') {
-    if (paidAgent) {
-      tier = 'hd';
-    } else if (user) {
-      spend = await q.spendCredits({ userId: user.id, cost: 1, reason: 'cutout' });
-      if (spend) tier = 'hd';
-      else if (asked === 'hd') {
-        /*
-         * Asked for full resolution and cannot pay for it.
-         *
-         * 402 with the price and where to buy, rather than silently downgrading to a
-         * preview -- an API caller that wanted HD and got a 640px image with a 200 has
-         * been given the wrong thing and told nothing went wrong.
-         */
-        return c.json(
-          {
-            error: 'no credits',
-            price_cents: config.pricing.hdCents,
-            topup: `${config.siteUrl}/pricing`,
-          },
-          402,
-        );
-      }
-    }
+  const { tier, refuse } = decideTier({
+    asked,
+    paidAgent,
+    hasUser: Boolean(user),
+    canSpend: Boolean(spend),
+  });
+
+  if (refuse) {
+    return c.json(
+      {
+        error: refuse.reason,
+        price_cents: config.pricing.hdCents,
+        topup: `${config.siteUrl}/pricing`,
+        docs: `${config.siteUrl}/docs`,
+      },
+      402,
+    );
   }
 
   const model = tier === 'hd' ? config.infer.hdModel : config.infer.model;

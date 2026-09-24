@@ -91,14 +91,12 @@ export const config = {
     /**
      * The paid model.
      *
-     * isnet-general-use rather than birefnet-general, for now, and the reason is
-     * operational rather than aesthetic: BiRefNet is the better model and is MIT, but
-     * the weights are about a gigabyte and it wants a GPU to be worth the wait. ISNet
-     * is Apache-2.0, small enough to bake into the image, and visibly better than the
-     * preview model -- which is what the paid tier has to be. Set INFER_HD_MODEL once
-     * there is a GPU under this.
+     * birefnet-general-lite: the BiRefNet architecture, MIT licensed, and small enough
+     * to bake into the image. The full birefnet-general is better still but is roughly
+     * a gigabyte and wants a GPU to be worth the wait, so it is fetched on demand
+     * rather than shipped -- set INFER_HD_MODEL=birefnet-general once there is one.
      */
-    hdModel: opt('INFER_HD_MODEL', 'isnet-general-use'),
+    hdModel: opt('INFER_HD_MODEL', 'birefnet-general-lite'),
     timeoutMs: num('INFER_TIMEOUT_MS', 120_000),
     /** Spawned by this container when ROLES includes `infer`. */
     spawn: bool('INFER_SPAWN', true),
