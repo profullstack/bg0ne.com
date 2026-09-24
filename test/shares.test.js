@@ -137,3 +137,62 @@ test('deleting the cutout keeps the share, and deleting the user takes it', asyn
   await sql`delete from users where id = ${user.id}`;
   expect(await q.getShare(share.id)).toBeNull();
 });
+
+/* ---------------------------------------------------------------- originals -- */
+
+const JPEG = Buffer.from('ffd8ffe000104a46494600010100000100010000', 'hex');
+
+test('the original is kept alongside the result and served as what it was', async () => {
+  const share = await q.createShare({
+    cutoutId: null, userId: user.id, png: PNG,
+    source: JPEG, sourceContentType: 'image/jpeg', sourceWidth: 900, sourceHeight: 700,
+  });
+
+  const src = await q.getShareSource(share.id);
+  expect(Buffer.from(src.source).equals(JPEG)).toBe(true);
+  // Served back as jpeg rather than relabelled png: a file that lies about its type
+  // renders anyway and then breaks whatever downloads it.
+  expect(src.source_content_type).toBe('image/jpeg');
+
+  const meta = await q.getShareMeta(share.id);
+  expect(meta.has_source).toBe(true);
+  expect(meta.source_width).toBe(900);
+});
+
+test('a share without an original is still a share', async () => {
+  const share = await q.createShare({ cutoutId: null, userId: user.id, png: PNG });
+  expect(share?.id).toBeTruthy();
+  expect(await q.getShareSource(share.id)).toBeNull();
+  expect((await q.getShareMeta(share.id)).has_source).toBe(false);
+});
+
+/**
+ * The result is the thing somebody asked for; the "before" is a nicety. An upload
+ * too large to keep must cost the nicety, never the result.
+ */
+test('an oversized original is dropped but the result is still shared', async () => {
+  const share = await q.createShare({
+    cutoutId: null, userId: user.id, png: PNG,
+    source: Buffer.alloc(500), sourceContentType: 'image/jpeg', maxBytes: 100,
+  });
+  expect(share?.id).toBeTruthy();
+  expect(await q.getShare(share.id)).toBeTruthy();
+  expect(await q.getShareSource(share.id)).toBeNull();
+});
+
+test('the original expires with the rest of the row', async () => {
+  const share = await q.createShare({
+    cutoutId: null, userId: user.id, png: PNG, source: JPEG, sourceContentType: 'image/jpeg',
+  });
+  await sql`update shares set expires_at = now() - interval '1 second' where id = ${share.id}`;
+
+  // Both images go together. The original is the more sensitive of the two, so it
+  // must not outlive the link by even one query path.
+  expect(await q.getShareSource(share.id)).toBeNull();
+  expect(await q.getShare(share.id)).toBeNull();
+});
+
+test('a garbage id cannot reach an original', async () => {
+  expect(await q.getShareSource('not-a-uuid')).toBeNull();
+  expect(await q.getShareSource("'; drop table shares; --")).toBeNull();
+});

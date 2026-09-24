@@ -267,6 +267,16 @@ app.post('/api/cutout', async (c) => {
      */
     let share = null;
     try {
+      /*
+       * Keep the original too, so the share can show before as well as after.
+       *
+       * Read here rather than earlier: a Blob can be read more than once, and there
+       * is no reason to hold a second copy of a 20MB upload in memory while the
+       * model is still working on it. If the cutout had failed we would never have
+       * needed these bytes at all.
+       */
+      const source = await file.arrayBuffer().catch(() => null);
+
       share = await q.createShare({
         cutoutId: id,
         userId: user?.id ?? null,
@@ -275,7 +285,15 @@ app.post('/api/cutout', async (c) => {
         height: meta.height,
         tier,
         model: meta.model,
+        source,
+        // What the browser said it uploaded. Served back verbatim rather than
+        // relabelled as PNG, which would make a JPEG that browsers still render but
+        // that is quietly lying about itself.
+        sourceContentType: file.type || 'application/octet-stream',
+        sourceWidth: meta.sourceWidth,
+        sourceHeight: meta.sourceHeight,
         ttlDays: config.shares.ttlDays,
+        maxBytes: config.shares.maxBytes,
       });
     } catch (shareErr) {
       console.error(`[share] not stored for ${id}: ${shareErr?.message ?? shareErr}`);
@@ -461,6 +479,22 @@ app.get('/c/:id/image.png', async (c) => {
   // so this must not be cached past the point where we stop serving it.
   c.header('cache-control', 'public, max-age=86400');
   return c.body(share.png);
+});
+
+/**
+ * The original, when one was small enough to keep.
+ *
+ * Served with the content type it arrived as. This is the more sensitive of the two
+ * images -- the cutout has had its background removed and this has not -- so it
+ * carries the same noindex and sits behind the same single unguessable id.
+ */
+app.get('/c/:id/original', async (c) => {
+  const row = await q.getShareSource(c.req.param('id'));
+  if (!row) return c.text('gone', 404);
+  c.header('content-type', row.source_content_type ?? 'application/octet-stream');
+  c.header('x-robots-tag', 'noindex, nofollow');
+  c.header('cache-control', 'public, max-age=86400');
+  return c.body(row.source);
 });
 
 app.post('/c/:id/delete', async (c) => {

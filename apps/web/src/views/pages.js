@@ -58,6 +58,10 @@ footer{margin:80px 0 40px;padding-top:24px;border-top:1px solid var(--line);colo
 .thumb.expired{display:flex;align-items:center;justify-content:center;border:1px dashed var(--line);color:var(--mut);font-size:14px}
 .histmeta{display:flex;flex-direction:column;gap:2px;margin-top:10px;font-size:14px}
 .sharebox{display:flex;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap}
+.ba{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.ba figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.ba img{width:100%;height:320px;object-fit:contain;border-radius:9px;display:block}
+.ba figcaption{margin-top:10px;font-size:14px;font-weight:600}
 .sharebox input{font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);flex:1;min-width:240px}
 `;
 
@@ -494,26 +498,52 @@ export function SharePage({ share, config }) {
   const expires = new Date(share.expires_at);
   const days = Math.max(0, Math.ceil((expires - Date.now()) / 86_400_000));
   const url = `${config.siteUrl}/c/${share.id}`;
+  const outDims = share.width && share.height ? `${share.width}&times;${share.height}` : '';
+  const srcDims =
+    share.source_width && share.source_height
+      ? `${share.source_width}&times;${share.source_height}`
+      : '';
+
+  /*
+   * Before and after, side by side.
+   *
+   * The "before" is what makes a shared cutout legible to somebody who never saw the
+   * original -- on its own, a subject on a checkerboard is just a picture. It is
+   * missing only when the upload was too large to keep, in which case the page shows
+   * the result alone rather than an apology.
+   */
+  const pair = share.has_source
+    ? `<div class="ba">
+         <figure>
+           <img src="/c/${share.id}/original" alt="before">
+           <figcaption>Before${srcDims ? ` <span class="muted">${srcDims}</span>` : ''}</figcaption>
+         </figure>
+         <figure>
+           <img class="checker" src="/c/${share.id}/image.png" alt="after">
+           <figcaption>After${outDims ? ` <span class="muted">${outDims}</span>` : ''}</figcaption>
+         </figure>
+       </div>`
+    : `<div class="card" style="text-align:center">
+         <img class="checker" src="/c/${share.id}/image.png" alt="cutout"
+              style="max-width:100%;border-radius:10px">
+         <p class="muted" style="margin:10px 0 0">The original was too large to keep.</p>
+       </div>`;
+
   return page({
     title: 'A cutout - bg0ne',
     description: 'A background removed with bg0ne.',
-    // No canonical and no indexing: the id is the only thing protecting the image.
+    // No canonical and no indexing: the id is the only thing protecting the images.
     body: `
-<h1>Here it is</h1>
+<h1>Before and after</h1>
 <p class="lede">Background removed with <a href="/">bg0ne</a>. This link works for
 ${days} more day${days === 1 ? '' : 's'}.</p>
 
-<div class="card" style="text-align:center">
-  <img class="checker" src="/c/${share.id}/image.png" alt="cutout"
-       style="max-width:100%;border-radius:10px">
-</div>
+${pair}
 
-<p style="margin-top:16px">
+<p style="margin-top:18px">
   <a class="btn" href="/c/${share.id}/image.png" download="cutout.png">Download PNG</a>
   <button class="btn ghost" id="copy" data-url="${esc(url)}">Copy link</button>
-  <span class="muted" style="margin-left:10px">
-    ${share.width && share.height ? `${share.width}&times;${share.height} &middot; ` : ''}${esc(share.model ?? '')}
-  </span>
+  <span class="muted" style="margin-left:10px">${esc(share.model ?? '')}</span>
 </p>
 
 <div class="card" style="margin-top:32px">

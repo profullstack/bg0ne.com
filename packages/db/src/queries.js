@@ -243,11 +243,25 @@ export async function createShare({
   height,
   tier,
   model,
+  source = null,
+  sourceContentType = null,
+  sourceWidth = null,
+  sourceHeight = null,
   ttlDays = 7,
   maxBytes = 8 * 1024 * 1024,
 }) {
   if (!png || png.byteLength === 0) return null;
   if (png.byteLength > maxBytes) return null;
+
+  /*
+   * The original is optional even when we have it.
+   *
+   * A 20MB phone photo is not worth keeping for seven days so that a share page can
+   * show a thumbnail of it, but the RESULT still is. So an oversized source is
+   * dropped and the share is created without a "before" rather than not created at
+   * all -- the page copes, and the caller keeps the thing they actually asked for.
+   */
+  const keepSource = source && source.byteLength > 0 && source.byteLength <= maxBytes;
 
   const [row] = await sql`
     insert into shares ${sql({
@@ -258,11 +272,25 @@ export async function createShare({
       height: height ?? null,
       tier: tier ?? null,
       model: model ?? null,
+      source: keepSource ? Buffer.from(source) : null,
+      source_content_type: keepSource ? (sourceContentType ?? 'application/octet-stream') : null,
+      source_width: keepSource ? (sourceWidth ?? null) : null,
+      source_height: keepSource ? (sourceHeight ?? null) : null,
       expires_at: new Date(Date.now() + ttlDays * 86_400_000),
     })}
     returning id, expires_at
   `;
   return row;
+}
+
+/** The original, if one was small enough to keep. */
+export async function getShareSource(id) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(id))) return null;
+  const [row] = await sql`
+    select source, source_content_type from shares
+    where id = ${id}::uuid and expires_at > now() and source is not null
+  `;
+  return row ?? null;
 }
 
 /** A share, if it exists and has not expired. Expiry is enforced in the query so a
@@ -279,7 +307,11 @@ export async function getShare(id) {
 export async function getShareMeta(id) {
   if (!/^[0-9a-f-]{36}$/i.test(String(id))) return null;
   const [row] = await sql`
-    select id, width, height, tier, model, created_at, expires_at, octet_length(png) as bytes
+    select id, width, height, tier, model, created_at, expires_at,
+           octet_length(png) as bytes,
+           source_width, source_height,
+           -- Whether there is a "before" to show, without loading it to find out.
+           (source is not null) as has_source
     from shares where id = ${id}::uuid and expires_at > now()
   `;
   return row ?? null;
