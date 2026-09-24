@@ -1,0 +1,27 @@
+# Everything needed to run bg0ne privately: a database and the app. No CoinPay
+# variables, so payments are off and every cutout is full resolution and free, which
+# is the right shape for a self-hosted instance.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: bg0ne
+      POSTGRES_DB: bg0ne
+    volumes: [bg0ne-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bg0ne"]
+      interval: 5s
+      retries: 20
+
+  web:
+    build: .
+    ports: ["3000:3000"]
+    environment:
+      DATABASE_URL: postgres://postgres:bg0ne@db:5432/bg0ne
+      SITE_URL: http://localhost:3000
+      ROLES: web,infer
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  bg0ne-db:
