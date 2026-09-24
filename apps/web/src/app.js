@@ -8,6 +8,7 @@ import { createGateway } from '@profullstack/x402-gateway';
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { throttle } from '@profullstack/throttle/hono';
+import { OPEN_PATHS, UNMETERED_PATHS } from './lib/open-paths.js';
 import { decideTier } from './lib/tier.js';
 import { Account, Landing, Pricing, SignIn, Sent, NotFound, Docs } from './views/pages.js';
 
@@ -50,9 +51,9 @@ const gateway = config.x402.enabled
       priceCents: config.x402.priceCents,
       currency: config.x402.currency,
       passMinutes: config.x402.passMinutes,
-      // Both spellings: the gateway prefix-matches only entries ending in a slash, so
-      // '/pricing' alone would open the page and still charge for anything beneath it.
-      openPaths: ['/', '/pricing', '/pricing/', '/docs', '/docs/', '/healthz'],
+      // See lib/open-paths.js. '/' is NOT the home page here: it is a prefix that
+      // matches every path, and it opened the whole site until a load test caught it.
+      openPaths: OPEN_PATHS,
     })
   : null;
 
@@ -69,7 +70,7 @@ app.use(
     gateway,
     limit: config.throttle.limit,
     windowSeconds: config.throttle.windowSeconds,
-    openPaths: ['/healthz', '/robots.txt', '/sitemap.xml'],
+    openPaths: UNMETERED_PATHS,
     exempt: (request) => Boolean(request.headers.get('cookie')?.includes(config.session.cookie)),
   }),
 );
