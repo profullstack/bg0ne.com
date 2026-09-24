@@ -10,7 +10,19 @@ import { getCookie } from 'hono/cookie';
 import { throttle } from '@profullstack/throttle/hono';
 import { OPEN_PATHS, UNMETERED_PATHS } from './lib/open-paths.js';
 import { decideTier } from './lib/tier.js';
-import { Account, Landing, Pricing, SignIn, Sent, NotFound, Docs } from './views/pages.js';
+import {
+  Account,
+  Docs,
+  Gone,
+  History,
+  Keys,
+  Landing,
+  NotFound,
+  Pricing,
+  Sent,
+  SharePage,
+  SignIn,
+} from './views/pages.js';
 
 export const app = new Hono();
 
@@ -90,13 +102,33 @@ app.get('/signin', (c) => html(c, SignIn({})));
 app.get('/account', async (c) => {
   const { user } = await caller(c);
   if (!user) return c.redirect('/signin');
-  const [balance, history, keys, recent] = await Promise.all([
+  const [balance, ledger] = await Promise.all([
     q.creditBalance(user.id),
     q.creditHistory(user.id),
-    q.listApiKeys(user.id),
-    q.recentCutouts(user.id),
   ]);
-  return html(c, Account({ user, balance, history, keys, recent, config }));
+  return html(c, Account({ user, balance, ledger, config }));
+});
+
+/**
+ * Everything this account has run.
+ *
+ * Driven from the cutout rows rather than the stored images, so a result whose
+ * image has expired still appears as something that happened and was paid for. A
+ * history that quietly loses its oldest entries is worse than no history, because
+ * it looks complete.
+ */
+app.get('/account/history', async (c) => {
+  const { user } = await caller(c);
+  if (!user) return c.redirect('/signin');
+  const rows = await q.cutoutHistory(user.id);
+  return html(c, History({ user, rows, config }));
+});
+
+app.get('/account/keys', async (c) => {
+  const { user } = await caller(c);
+  if (!user) return c.redirect('/signin');
+  const keys = await q.listApiKeys(user.id);
+  return html(c, Keys({ user, keys, config }));
 });
 
 /* -------------------------------------------------------------------- auth -- */
@@ -222,11 +254,42 @@ app.post('/api/cutout', async (c) => {
       payer: paidAgent ? (c.req.header('x-payer') ?? 'x402') : null,
     });
 
+    /*
+     * Keep the result so it has a URL.
+     *
+     * Every cutout gets one, free or paid -- a preview somebody wants to send to a
+     * colleague is the cheapest advertising this site has, and making the share the
+     * paid tier's privilege would take it away from exactly the people who spread it.
+     *
+     * Failing here must not fail the cutout. The image is already made and the
+     * caller is holding the request open for it; a share link is a nicety and losing
+     * one is worth strictly less than losing the thing they asked for.
+     */
+    let share = null;
+    try {
+      share = await q.createShare({
+        cutoutId: id,
+        userId: user?.id ?? null,
+        png,
+        width: meta.width,
+        height: meta.height,
+        tier,
+        model: meta.model,
+        ttlDays: config.shares.ttlDays,
+      });
+    } catch (shareErr) {
+      console.error(`[share] not stored for ${id}: ${shareErr?.message ?? shareErr}`);
+    }
+
     c.header('content-type', 'image/png');
     c.header('x-cutout-id', id);
     c.header('x-cutout-tier', tier);
     c.header('x-cutout-model', meta.model);
     c.header('x-cutout-ms', String(Date.now() - started));
+    if (share) {
+      c.header('x-share-url', `${config.siteUrl}/c/${share.id}`);
+      c.header('x-share-expires', new Date(share.expires_at).toISOString());
+    }
     if (spend) c.header('x-credits-remaining', String(spend.remaining));
     // A preview is deliberately not cacheable as if it were the real thing.
     c.header('cache-control', 'no-store');
@@ -336,6 +399,48 @@ app.post('/webhooks/coinpay', async (c) => {
   // 2xx even when nothing was granted. CoinPay retries anything else, and a webhook
   // for a cancelled payment is correctly handled by recording it and doing nothing.
   return c.json({ ok: true, ...result });
+});
+
+/* ------------------------------------------------------------------ sharing -- */
+
+/**
+ * A shared result.
+ *
+ * The id IS the capability: an unguessable v4 uuid is the only thing standing
+ * between a link and somebody's photograph. So these are `noindex` -- a search
+ * engine that crawls one shared link and publishes it has turned a private URL into
+ * a public one, and nobody who pressed "copy link" agreed to that.
+ */
+app.get('/c/:id', async (c) => {
+  const meta = await q.getShareMeta(c.req.param('id'));
+  if (!meta) return html(c, Gone({ config }), 404);
+  c.header('x-robots-tag', 'noindex, nofollow');
+  return html(c, SharePage({ share: meta, config }));
+});
+
+/*
+ * A separate segment rather than "/c/:id.png".
+ *
+ * Hono's matcher reads ":id.png" as one parameter token and the dot is not the
+ * separator it looks like, so the raw image and the page end up fighting over the
+ * same route. A path segment is unambiguous.
+ */
+app.get('/c/:id/image.png', async (c) => {
+  const share = await q.getShare(c.req.param('id'));
+  if (!share) return c.text('gone', 404);
+  c.header('content-type', share.content_type ?? 'image/png');
+  c.header('x-robots-tag', 'noindex, nofollow');
+  // Immutable for a day: the bytes behind an id never change, but the id expires,
+  // so this must not be cached past the point where we stop serving it.
+  c.header('cache-control', 'public, max-age=86400');
+  return c.body(share.png);
+});
+
+app.post('/c/:id/delete', async (c) => {
+  const { user } = await caller(c);
+  if (!user) return c.json({ error: 'sign in first' }, 401);
+  const ok = await q.deleteShare({ id: c.req.param('id'), userId: user.id });
+  return c.json({ deleted: ok });
 });
 
 /* -------------------------------------------------------------- boilerplate -- */

@@ -47,6 +47,17 @@ input[type=email]{font:inherit;padding:11px 12px;border:1px solid var(--line);bo
    light page looks like it simply deleted the subject. */
 .checker{background-image:linear-gradient(45deg,#c8c8d4 25%,transparent 25%),linear-gradient(-45deg,#c8c8d4 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#c8c8d4 75%),linear-gradient(-45deg,transparent 75%,#c8c8d4 75%);background-size:18px 18px;background-position:0 0,0 9px,9px -9px,-9px 0}
 footer{margin:80px 0 40px;padding-top:24px;border-top:1px solid var(--line);color:var(--mut);font-size:14px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:24px 0 24px}
+.tab{padding:9px 14px;text-decoration:none;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab:hover{color:var(--fg)}
+.tab.on{color:var(--fg);border-bottom-color:var(--accent);font-weight:600}
+.histgrid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.hist{padding:12px}
+.thumb{width:100%;height:150px;object-fit:contain;border-radius:8px;display:block}
+.thumb.expired{display:flex;align-items:center;justify-content:center;border:1px dashed var(--line);color:var(--mut);font-size:14px}
+.histmeta{display:flex;flex-direction:column;gap:2px;margin-top:10px;font-size:14px}
+.sharebox{display:flex;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap}
+.sharebox input{font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);flex:1;min-width:240px}
 `;
 
 function page({ title, description, body, canonical }) {
@@ -112,6 +123,12 @@ also just run it yourself.</p>
     <a id="dl" class="btn" download="cutout.png">Download PNG</a>
     <span id="tier" class="muted" style="margin-left:12px"></span>
   </p>
+  <div id="sharebox" class="sharebox" style="display:none">
+    <input id="shareurl" readonly onclick="this.select()">
+    <button id="copy" class="btn ghost">Copy link</button>
+    <a id="open" class="btn ghost" target="_blank" rel="noopener">Open</a>
+    <span id="shareexp" class="muted"></span>
+  </div>
 </div>
 
 <h2>Why this exists</h2>
@@ -166,10 +183,30 @@ async function go(file){
     dl.href=after.src;
     const tier=res.headers.get('x-cutout-tier'), ms=res.headers.get('x-cutout-ms');
     tierEl.textContent=(tier==='hd'?'Full resolution':'Preview')+' · '+ms+'ms · '+res.headers.get('x-cutout-model');
+
+    // Every cutout gets a link, free or paid. It is the cheapest advertising here.
+    const shareUrl=res.headers.get('x-share-url');
+    const box=document.getElementById('sharebox');
+    if(shareUrl){
+      document.getElementById('shareurl').value=shareUrl;
+      document.getElementById('open').href=shareUrl;
+      const exp=res.headers.get('x-share-expires');
+      document.getElementById('shareexp').textContent = exp
+        ? 'expires '+new Date(exp).toISOString().slice(0,10) : '';
+      box.style.display='';
+    } else { box.style.display='none'; }
+
     status.textContent='';
     result.style.display='';
   }catch(err){status.textContent='Failed: '+err.message}
 }
+
+document.getElementById('copy').addEventListener('click',async()=>{
+  const btn=document.getElementById('copy');
+  try{await navigator.clipboard.writeText(document.getElementById('shareurl').value);btn.textContent='Copied'}
+  catch{document.getElementById('shareurl').select();btn.textContent='Press Ctrl+C'}
+  setTimeout(()=>{btn.textContent='Copy link'},1500);
+});
 </script>`,
   });
 }
@@ -277,51 +314,122 @@ for a private instance.</p>`,
 
 /* ----------------------------------------------------------------- account -- */
 
-export function Account({ user, balance, history, keys, recent, config }) {
-  const rows = history
+/** One tab bar, so the three account pages cannot drift apart. */
+function AccountNav(active) {
+  const tabs = [
+    ['/account', 'Credits'],
+    ['/account/history', 'History'],
+    ['/account/keys', 'API keys'],
+  ];
+  return `<nav class="tabs">${tabs
+    .map(
+      ([href, label]) =>
+        `<a href="${href}" class="${href === active ? 'tab on' : 'tab'}">${label}</a>`,
+    )
+    .join('')}</nav>`;
+}
+
+export function Account({ user, balance, ledger, config }) {
+  const rows = ledger
     .map(
       (h) =>
         `<tr><td>${h.delta > 0 ? '+' : ''}${h.delta}</td><td>${esc(h.reason)}</td>
          <td class="muted">${new Date(h.created_at).toISOString().slice(0, 16).replace('T', ' ')}</td></tr>`,
     )
     .join('');
-  const keyRows = keys
-    .map((k) => `<tr><td><code>${esc(k.prefix)}…</code></td><td class="muted">${esc(k.name)}</td></tr>`)
-    .join('');
   return page({
-    title: 'Account — bg0ne',
-    description: 'Your credits, keys and recent cutouts.',
+    title: 'Account - bg0ne',
+    description: 'Your credits and billing history.',
     body: `
 <h1>Account</h1>
 <p class="lede">${esc(user.email)}</p>
+${AccountNav('/account')}
 
-<div class="grid">
-  <div class="card">
-    <div class="muted">Credits</div>
-    <div class="big">${balance.toLocaleString()}</div>
-    <p class="muted" style="margin:4px 0 0">One credit, one full-resolution image. They do not expire.</p>
-    <p style="margin:14px 0 0"><a class="btn" href="/pricing">Top up</a></p>
-  </div>
-  <div class="card">
-    <div class="muted">Recent cutouts</div>
-    <div class="big">${recent.length}</div>
-    <p class="muted" style="margin:4px 0 0">Last ${recent.length} shown in your history.</p>
-  </div>
-</div>
-
-<h2>API keys</h2>
 <div class="card">
-  ${keys.length ? `<table>${keyRows}</table>` : '<p class="muted" style="margin:0">No keys yet.</p>'}
-  <p style="margin:14px 0 0"><button id="mint" class="btn ghost">Create a key</button></p>
-  <p id="minted" class="muted" style="margin:10px 0 0"></p>
+  <div class="muted">Credits</div>
+  <div class="big">${balance.toLocaleString()}</div>
+  <p class="muted" style="margin:4px 0 0">One credit, one full-resolution image. They do not expire.</p>
+  <p style="margin:14px 0 0"><a class="btn" href="/pricing">Top up</a></p>
 </div>
 
 <h2>Credit history</h2>
 <div class="card">
-${history.length ? `<table><tr><th>Change</th><th>Reason</th><th>When</th></tr>${rows}</table>` : '<p class="muted" style="margin:0">Nothing yet.</p>'}
+${ledger.length ? `<table><tr><th>Change</th><th>Reason</th><th>When</th></tr>${rows}</table>` : '<p class="muted" style="margin:0">Nothing yet.</p>'}
 </div>
 
-<p style="margin-top:32px"><form method="post" action="/auth/signout"><button class="btn ghost">Sign out</button></form></p>
+<p style="margin-top:32px"><form method="post" action="/auth/signout"><button class="btn ghost">Sign out</button></form></p>`,
+  });
+}
+
+/**
+ * Everything this account has run.
+ *
+ * A row survives its image. When a result has expired the entry stays and says so,
+ * because a history that silently drops its oldest entries is worse than none: it
+ * looks complete.
+ */
+export function History({ user, rows, config }) {
+  const cards = rows
+    .map((r) => {
+      const when = new Date(r.created_at).toISOString().slice(0, 16).replace('T', ' ');
+      const dims = r.width && r.height ? `${r.width}&times;${r.height}` : '';
+      const body = r.share_id
+        ? `<a href="/c/${r.share_id}"><img class="checker thumb" src="/c/${r.share_id}/image.png" alt="cutout" loading="lazy"></a>`
+        : '<div class="thumb expired"><span>image expired</span></div>';
+      return `<div class="card hist">
+        ${body}
+        <div class="histmeta">
+          <strong>${r.tier === 'hd' ? 'Full resolution' : 'Preview'}</strong>
+          <span class="muted">${dims}</span>
+          <span class="muted">${esc(r.model ?? '')}</span>
+          <span class="muted">${when}</span>
+          ${r.share_id ? `<a href="/c/${r.share_id}">Share link</a>` : ''}
+        </div>
+      </div>`;
+    })
+    .join('');
+  return page({
+    title: 'History - bg0ne',
+    description: 'Every cutout on this account.',
+    body: `
+<h1>History</h1>
+<p class="lede">${esc(user.email)}</p>
+${AccountNav('/account/history')}
+
+${
+  rows.length
+    ? `<p class="muted">Images are kept for ${config.shares.ttlDays} days. The record of a
+       cutout stays after its image has gone.</p>
+       <div class="histgrid">${cards}</div>`
+    : '<div class="card"><p class="muted" style="margin:0">Nothing yet. <a href="/">Run one</a>.</p></div>'
+}`,
+  });
+}
+
+export function Keys({ user, keys, config }) {
+  const keyRows = keys
+    .map(
+      (k) =>
+        `<tr><td><code>${esc(k.prefix)}&hellip;</code></td><td class="muted">${esc(k.name)}</td>
+         <td class="muted">${k.last_used_at ? new Date(k.last_used_at).toISOString().slice(0, 10) : 'never used'}</td></tr>`,
+    )
+    .join('');
+  return page({
+    title: 'API keys - bg0ne',
+    description: 'Keys for calling the API from your own code.',
+    body: `
+<h1>API keys</h1>
+<p class="lede">${esc(user.email)}</p>
+${AccountNav('/account/keys')}
+
+<div class="card">
+  ${keys.length ? `<table><tr><th>Key</th><th>Name</th><th>Last used</th></tr>${keyRows}</table>` : '<p class="muted" style="margin:0">No keys yet.</p>'}
+  <p style="margin:14px 0 0"><button id="mint" class="btn ghost">Create a key</button></p>
+  <p id="minted" class="muted" style="margin:10px 0 0"></p>
+</div>
+
+<p class="muted">A key spends credits the same way the website does. See the
+<a href="/docs">API docs</a>.</p>
 
 <script>
 document.getElementById('mint').addEventListener('click',async()=>{
@@ -332,6 +440,64 @@ document.getElementById('mint').addEventListener('click',async()=>{
     : (j.error||'failed');
 });
 </script>`,
+  });
+}
+
+/* ------------------------------------------------------------------ sharing -- */
+
+export function SharePage({ share, config }) {
+  const expires = new Date(share.expires_at);
+  const days = Math.max(0, Math.ceil((expires - Date.now()) / 86_400_000));
+  const url = `${config.siteUrl}/c/${share.id}`;
+  return page({
+    title: 'A cutout - bg0ne',
+    description: 'A background removed with bg0ne.',
+    // No canonical and no indexing: the id is the only thing protecting the image.
+    body: `
+<h1>Here it is</h1>
+<p class="lede">Background removed with <a href="/">bg0ne</a>. This link works for
+${days} more day${days === 1 ? '' : 's'}.</p>
+
+<div class="card" style="text-align:center">
+  <img class="checker" src="/c/${share.id}/image.png" alt="cutout"
+       style="max-width:100%;border-radius:10px">
+</div>
+
+<p style="margin-top:16px">
+  <a class="btn" href="/c/${share.id}/image.png" download="cutout.png">Download PNG</a>
+  <button class="btn ghost" id="copy" data-url="${esc(url)}">Copy link</button>
+  <span class="muted" style="margin-left:10px">
+    ${share.width && share.height ? `${share.width}&times;${share.height} &middot; ` : ''}${esc(share.model ?? '')}
+  </span>
+</p>
+
+<div class="card" style="margin-top:32px">
+  <strong>Made with bg0ne</strong>
+  <p class="muted" style="margin:6px 0 12px">Open source background removal. Previews are
+  free and unlimited, full resolution is ${config.pricing.hdCents}&cent; an image, and you
+  can run the whole thing yourself.</p>
+  <a class="btn" href="/">Try it on your own image</a>
+</div>
+
+<script>
+document.getElementById('copy').addEventListener('click',async(e)=>{
+  try{await navigator.clipboard.writeText(e.target.dataset.url);e.target.textContent='Copied'}
+  catch{e.target.textContent='Copy failed'}
+  setTimeout(()=>{e.target.textContent='Copy link'},1500);
+});
+</script>`,
+  });
+}
+
+export function Gone({ config }) {
+  return page({
+    title: 'Link expired - bg0ne',
+    description: 'That shared cutout has expired.',
+    body: `
+<h1>That link has expired</h1>
+<p class="lede">Shared results are kept for ${config.shares.ttlDays} days and then
+deleted. That is deliberate: they are your images, not ours.</p>
+<p><a class="btn" href="/">Make a new one</a></p>`,
   });
 }
 

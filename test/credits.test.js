@@ -1,5 +1,5 @@
-import { afterAll, beforeEach, expect, test } from 'bun:test';
-import { close, sql } from '../packages/db/src/index.js';
+import { beforeEach, expect, test } from 'bun:test';
+import { sql } from '../packages/db/src/index.js';
 import * as q from '../packages/db/src/queries.js';
 
 /**
@@ -9,6 +9,16 @@ import * as q from '../packages/db/src/queries.js';
  * part where being wrong means charging somebody twice or giving work away.
  */
 
+/*
+ * No afterAll(close) here.
+ *
+ * `sql` is one pool shared by every test file in the process, so a file that closes
+ * it in afterAll leaves whichever file runs next talking to a dead handle and
+ * failing with ERR_POSTGRES_CONNECTION_CLOSED -- a Postgres error that says nothing
+ * about the actual cause, which is another test file's teardown. The pool goes when
+ * the process does.
+ */
+
 let user;
 
 beforeEach(async () => {
@@ -16,9 +26,6 @@ beforeEach(async () => {
   user = await q.findOrCreateUser(`test-${crypto.randomUUID()}@example.com`);
 });
 
-afterAll(async () => {
-  await close();
-});
 
 async function makePayment(amountCents, ref = crypto.randomUUID()) {
   const [row] = await sql`

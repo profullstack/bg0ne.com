@@ -1,5 +1,6 @@
 import { assertCoinpayMerchantKey, config } from '@bg0ne/config';
 import { close as closeDb, healthcheck, sql } from '@bg0ne/db';
+import * as q from '@bg0ne/db/queries';
 import { migrate } from '@bg0ne/db/migrate';
 import { configurePayments } from '@bg0ne/payments';
 import { startInfer, stopInfer, waitForInfer } from '@bg0ne/cutout';
@@ -68,6 +69,26 @@ if (config.roles.includes('infer')) {
   }
 }
 
+/*
+ * Delete shared images that have passed their date.
+ *
+ * The read path already refuses an expired share, so this is about not keeping other
+ * people's photographs rather than about correctness. It runs on boot and on an
+ * interval; every instance running it is harmless because the delete is idempotent
+ * and indexed.
+ */
+async function purgeShares() {
+  try {
+    const n = await q.purgeExpiredShares();
+    if (n > 0) console.log(`[shares] purged ${n} expired`);
+  } catch (err) {
+    // Never fatal: failing to tidy up must not take the site down.
+    console.warn(`[shares] purge failed: ${err?.message ?? err}`);
+  }
+}
+await purgeShares();
+const purgeTimer = setInterval(purgeShares, config.shares.purgeIntervalMinutes * 60_000);
+
 // Railway injects PORT. Never hardcode it: a fixed port leaves the edge proxy talking
 // to a closed socket while the container still reports healthy.
 const server = Bun.serve({ port: config.port, fetch: app.fetch, idleTimeout: 120 });
@@ -76,6 +97,7 @@ console.log(`[web] site ${config.siteUrl} · payments ${config.coinpay.enabled ?
 
 async function shutdown(signal) {
   console.log(`[main] ${signal}, draining`);
+  clearInterval(purgeTimer);
   await Promise.allSettled([server.stop(true)]);
   stopInfer();
   await closeDb();

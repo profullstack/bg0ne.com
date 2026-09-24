@@ -226,6 +226,100 @@ export async function recentCutouts(userId, limit = 25) {
   `;
 }
 
+/* ------------------------------------------------------------------- shares -- */
+
+/**
+ * Keep a result so it has a URL.
+ *
+ * Returns null rather than throwing when the image is too big to be worth keeping:
+ * a share link is a nicety, and failing somebody's cutout because we did not want
+ * to store the result would be trading the product for the garnish.
+ */
+export async function createShare({
+  cutoutId,
+  userId,
+  png,
+  width,
+  height,
+  tier,
+  model,
+  ttlDays = 7,
+  maxBytes = 8 * 1024 * 1024,
+}) {
+  if (!png || png.byteLength === 0) return null;
+  if (png.byteLength > maxBytes) return null;
+
+  const [row] = await sql`
+    insert into shares ${sql({
+      cutout_id: cutoutId ?? null,
+      user_id: userId ?? null,
+      png: Buffer.from(png),
+      width: width ?? null,
+      height: height ?? null,
+      tier: tier ?? null,
+      model: model ?? null,
+      expires_at: new Date(Date.now() + ttlDays * 86_400_000),
+    })}
+    returning id, expires_at
+  `;
+  return row;
+}
+
+/** A share, if it exists and has not expired. Expiry is enforced in the query so a
+ *  missed cleanup run can never serve an image past its date. */
+export async function getShare(id) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(id))) return null;
+  const [row] = await sql`
+    select * from shares where id = ${id}::uuid and expires_at > now()
+  `;
+  return row ?? null;
+}
+
+/** The same, without the bytes -- for a page that only needs to describe it. */
+export async function getShareMeta(id) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(id))) return null;
+  const [row] = await sql`
+    select id, width, height, tier, model, created_at, expires_at, octet_length(png) as bytes
+    from shares where id = ${id}::uuid and expires_at > now()
+  `;
+  return row ?? null;
+}
+
+/**
+ * One person's history: every cutout they have run, with its share if the image is
+ * still around.
+ *
+ * Driven from `cutouts` rather than from `shares` so an expired image still appears
+ * as something that happened and was charged for, instead of vanishing from the
+ * record along with its bytes.
+ */
+export async function cutoutHistory(userId, limit = 60) {
+  if (!userId) return [];
+  return sql`
+    select c.id, c.tier, c.model, c.width, c.height, c.duration_ms, c.created_at,
+           s.id as share_id, s.expires_at as share_expires_at
+    from cutouts c
+    left join shares s on s.cutout_id = c.id and s.expires_at > now()
+    where c.user_id = ${userId}
+    order by c.created_at desc
+    limit ${limit}
+  `;
+}
+
+export async function deleteShare({ id, userId }) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(id))) return false;
+  const rows = await sql`
+    delete from shares where id = ${id}::uuid and user_id = ${userId} returning id
+  `;
+  return rows.length > 0;
+}
+
+/** Drop what has expired. Cheap, indexed, and safe to run on every instance. */
+export async function purgeExpiredShares() {
+  const rows = await sql`delete from shares where expires_at <= now() returning id`;
+  return rows.length;
+}
+
 /* ----------------------------------------------------------------- api keys -- */
 
 export async function insertApiKey({ userId, name, keyHash, prefix }) {

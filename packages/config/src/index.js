@@ -189,6 +189,22 @@ export const config = {
     passMinutes: num('X402_PASS_MINUTES', 60),
   },
 
+  /**
+   * Shared results.
+   *
+   * Every cutout gets a link, free or paid. The expiry is not optional and not
+   * long: these are other people's photographs, and the id is the only thing
+   * protecting them, so holding them indefinitely turns a convenience into a
+   * liability that grows on its own.
+   */
+  shares: {
+    ttlDays: num('SHARE_TTL_DAYS', 7),
+    /** Anything larger is served but not kept. */
+    maxBytes: num('SHARE_MAX_BYTES', 8 * 1024 * 1024),
+    /** How often a running instance sweeps what has expired. */
+    purgeIntervalMinutes: num('SHARE_PURGE_MINUTES', 60),
+  },
+
   /** The free allowance before a caller is asked to pay. Previews only. */
   throttle: {
     limit: num('THROTTLE_LIMIT', 60),
