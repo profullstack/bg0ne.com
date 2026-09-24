@@ -494,6 +494,24 @@ document.getElementById('mint').addEventListener('click',async()=>{
 
 /* ------------------------------------------------------------------ sharing -- */
 
+/**
+ * What to say when there is no "before".
+ *
+ * Never guesses. This page used to tell every sourceless share that its original
+ * had been too large, which was false for everything made before originals were
+ * kept at all, and pointed the reader at a size limit that had nothing to do with
+ * it. A reason we did not record is a reason we do not state.
+ */
+function noBeforeReason(share) {
+  if (share.source_omitted_reason === 'too_large') {
+    return 'The original was too large to keep, so only the result was saved.';
+  }
+  if (share.source_omitted_reason === 'legacy') {
+    return 'This one was made before originals were kept, so only the result was saved. Run the image again to get a before and after.';
+  }
+  return 'Only the result was saved for this one.';
+}
+
 export function SharePage({ share, config }) {
   const expires = new Date(share.expires_at);
   const days = Math.max(0, Math.ceil((expires - Date.now()) / 86_400_000));
@@ -526,7 +544,7 @@ export function SharePage({ share, config }) {
     : `<div class="card" style="text-align:center">
          <img class="checker" src="/c/${share.id}/image.png" alt="cutout"
               style="max-width:100%;border-radius:10px">
-         <p class="muted" style="margin:10px 0 0">The original was too large to keep.</p>
+         <p class="muted" style="margin:10px 0 0">${esc(noBeforeReason(share))}</p>
        </div>`;
 
   return page({

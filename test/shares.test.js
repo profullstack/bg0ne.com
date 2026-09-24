@@ -196,3 +196,35 @@ test('a garbage id cannot reach an original', async () => {
   expect(await q.getShareSource('not-a-uuid')).toBeNull();
   expect(await q.getShareSource("'; drop table shares; --")).toBeNull();
 });
+
+/**
+ * Why there is no "before".
+ *
+ * The page used to tell every sourceless share that its original had been too
+ * large, including rows written before originals were kept at all. That sent a
+ * reader looking for a size limit that had nothing to do with it. A reason we did
+ * not record is a reason we must not state.
+ */
+test('an oversized original records that it was too large', async () => {
+  const share = await q.createShare({
+    cutoutId: null, userId: user.id, png: PNG,
+    source: Buffer.alloc(500), sourceContentType: 'image/jpeg', maxBytes: 100,
+  });
+  expect((await q.getShareMeta(share.id)).source_omitted_reason).toBe('too_large');
+});
+
+test('a share created with no original at all records that, not a size', async () => {
+  const share = await q.createShare({ cutoutId: null, userId: user.id, png: PNG });
+  const meta = await q.getShareMeta(share.id);
+  expect(meta.source_omitted_reason).toBe('absent');
+  expect(meta.source_omitted_reason).not.toBe('too_large');
+});
+
+test('a share WITH an original records no reason at all', async () => {
+  const share = await q.createShare({
+    cutoutId: null, userId: user.id, png: PNG, source: JPEG, sourceContentType: 'image/jpeg',
+  });
+  const meta = await q.getShareMeta(share.id);
+  expect(meta.has_source).toBe(true);
+  expect(meta.source_omitted_reason).toBeNull();
+});

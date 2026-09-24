@@ -263,6 +263,19 @@ export async function createShare({
    */
   const keepSource = source && source.byteLength > 0 && source.byteLength <= maxBytes;
 
+  /*
+   * Record WHY, when we are not keeping it.
+   *
+   * Without this the page has to guess, and it guessed wrong: every sourceless row
+   * was told its original had been too large, including the ones written before
+   * originals were kept at all. A reason that is invented is worse than none.
+   */
+  const omitted = keepSource
+    ? null
+    : source && source.byteLength > maxBytes
+      ? 'too_large'
+      : 'absent';
+
   const [row] = await sql`
     insert into shares ${sql({
       cutout_id: cutoutId ?? null,
@@ -276,6 +289,7 @@ export async function createShare({
       source_content_type: keepSource ? (sourceContentType ?? 'application/octet-stream') : null,
       source_width: keepSource ? (sourceWidth ?? null) : null,
       source_height: keepSource ? (sourceHeight ?? null) : null,
+      source_omitted_reason: omitted,
       expires_at: new Date(Date.now() + ttlDays * 86_400_000),
     })}
     returning id, expires_at
@@ -309,7 +323,7 @@ export async function getShareMeta(id) {
   const [row] = await sql`
     select id, width, height, tier, model, created_at, expires_at,
            octet_length(png) as bytes,
-           source_width, source_height,
+           source_width, source_height, source_omitted_reason,
            -- Whether there is a "before" to show, without loading it to find out.
            (source is not null) as has_source
     from shares where id = ${id}::uuid and expires_at > now()
