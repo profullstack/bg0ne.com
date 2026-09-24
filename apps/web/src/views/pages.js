@@ -41,6 +41,7 @@ code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 pre{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto;font-size:13.5px}
 code{font-size:13.5px}
 input[type=email]{font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--fg);width:100%}
+select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--fg)}
 .muted{color:var(--mut)}
 .big{font-size:38px;font-weight:700;letter-spacing:-.02em}
 /* The checkerboard is what makes transparency legible; without it a cutout on a
@@ -224,8 +225,35 @@ export function Pricing({ config }) {
       </tr>`,
     )
     .join('');
+
+  // Only chains this business actually holds a wallet for. Offering one it does not
+  // is a button that fails at the moment somebody presses it.
+  const LABELS = {
+    USDC_POL: 'USDC on Polygon',
+    USDC_SOL: 'USDC on Solana',
+    USDC_ETH: 'USDC on Ethereum',
+    USDT_POL: 'USDT on Polygon',
+    USDT_SOL: 'USDT on Solana',
+    USDT_ETH: 'USDT on Ethereum',
+    SOL: 'Solana',
+    POL: 'Polygon',
+    ETH: 'Ethereum',
+    BTC: 'Bitcoin',
+    BCH: 'Bitcoin Cash',
+    DOGE: 'Dogecoin',
+    XRP: 'XRP',
+    ADA: 'Cardano',
+    BNB: 'BNB',
+  };
+  const options = config.coinpay.chains
+    .map(
+      (ch) =>
+        `<option value="${ch}"${ch === config.coinpay.defaultChain ? ' selected' : ''}>${esc(LABELS[ch] ?? ch)}</option>`,
+    )
+    .join('');
+
   return page({
-    title: 'Pricing — bg0ne',
+    title: 'Pricing - bg0ne',
     description: 'Pay by the image. Credits never expire and there is no subscription.',
     canonical: `${config.siteUrl}/pricing`,
     body: `
@@ -234,10 +262,15 @@ export function Pricing({ config }) {
 nothing to cancel, and previews stay free whether you have credits or not.</p>
 
 <div class="card">
+<p style="margin:0 0 14px">
+  <label for="chain" class="muted">Pay with</label><br>
+  <select id="chain" style="margin-top:6px">${options}</select>
+</p>
 <table>
 <tr><th>Top up</th><th>Credits</th><th>Per image</th><th></th></tr>
 ${rows}
 </table>
+<p id="buyerr" class="muted" style="margin:14px 0 0"></p>
 </div>
 
 <h2>Agents</h2>
@@ -251,13 +284,25 @@ account, no key and no card. See the <a href="/docs">API docs</a>.</p>
 thing. We are selling the convenience, not the capability.</p>
 
 <script>
+const err=document.getElementById('buyerr');
 document.querySelectorAll('button[data-cents]').forEach(b=>b.addEventListener('click',async()=>{
-  const body=new FormData();body.append('cents',b.dataset.cents);
-  const res=await fetch('/api/topup',{method:'POST',body});
-  if(res.status===401){location.href='/signin';return}
-  const j=await res.json();
-  if(j.checkout_url)location.href=j.checkout_url;
-  else alert(j.error||'could not start checkout');
+  const was=b.textContent;
+  b.disabled=true;b.textContent='Starting…';err.textContent='';
+  try{
+    const body=new FormData();
+    body.append('cents',b.dataset.cents);
+    body.append('chain',document.getElementById('chain').value);
+    const res=await fetch('/api/topup',{method:'POST',body});
+    if(res.status===401){location.href='/signin';return}
+    const j=await res.json().catch(()=>({}));
+    if(j.checkout_url){location.href=j.checkout_url;return}
+    // Say what happened. A button that silently does nothing is the bug this replaces.
+    err.textContent=(j.error||'could not start checkout')+(j.detail?' - '+j.detail:'');
+  }catch(e){
+    err.textContent='could not start checkout: '+e.message;
+  }finally{
+    b.disabled=false;b.textContent=was;
+  }
 }));
 </script>`,
   });

@@ -146,8 +146,34 @@ export const config = {
     get webhookSecret() {
       return process.env.COINPAY_WEBHOOK_SECRET ?? '';
     },
-    /** Chain the hosted checkout settles on unless the buyer picks another. */
-    defaultChain: opt('COINPAY_CHAIN', 'BASE'),
+    /**
+     * Chains a buyer may settle on.
+     *
+     * These are not arbitrary. CoinPay resolves the payee from the BUSINESS's own
+     * wallets, so naming a chain the business has no wallet for is refused at
+     * checkout with "No <X> wallet configured for this business" -- a 400 that only
+     * appears at the moment somebody presses pay. BASE was the default here and is
+     * exactly that mistake: it is a real chain, the key was valid, and the button
+     * simply failed.
+     *
+     * Verified against this business's imported wallets on 2026-09-24. Re-check with
+     * `coinpay business list` + GET /api/businesses/:id/wallets before adding one.
+     */
+    chains: opt('COINPAY_CHAINS', 'USDC_POL,USDC_SOL,USDC_ETH,SOL,POL,ETH,BTC')
+      .split(',')
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean),
+
+    /**
+     * What the buyer gets if they express no preference.
+     *
+     * A stablecoin on a cheap chain: the bill is three cents an image, and a default
+     * whose network fee costs more than the top-up is not a default.
+     */
+    get defaultChain() {
+      const chosen = opt('COINPAY_CHAIN', 'USDC_POL').toUpperCase();
+      return this.chains.includes(chosen) ? chosen : this.chains[0];
+    },
   },
 
   /**

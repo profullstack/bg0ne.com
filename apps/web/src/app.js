@@ -325,22 +325,49 @@ app.post('/api/topup', async (c) => {
   if (!user) return c.json({ error: 'sign in first' }, 401);
   if (!pay.paymentsEnabled()) return c.json({ error: 'payments are not configured' }, 503);
 
-  const cents = Number((await c.req.parseBody()).cents ?? 0);
+  const body = await c.req.parseBody();
+  const cents = Number(body.cents ?? 0);
   const bundle = config.pricing.topups.find((t) => t.cents === cents);
   // Only the published bundles. Taking an arbitrary amount from the request lets a
   // caller name its own price for a fixed number of credits.
   if (!bundle) return c.json({ error: 'pick one of the published bundles' }, 400);
 
-  const { checkoutUrl, paymentRef } = await pay.createCheckout({
-    user,
-    amountCents: bundle.cents,
-    description: `${bundle.credits} bg0ne credits`,
-    metadata: { credits: String(bundle.credits) },
-    blockchain: config.coinpay.defaultChain,
-    successUrl: `${config.siteUrl}/account`,
-    cancelUrl: `${config.siteUrl}/pricing`,
-  });
-  return c.json({ checkout_url: checkoutUrl, payment_ref: paymentRef });
+  /*
+   * The chain has to be one this business actually holds a wallet for.
+   *
+   * CoinPay resolves the payee from the business's own wallets and refuses anything
+   * else with a 400 at the moment of purchase. Checking here means a bad chain is a
+   * clear 400 from us rather than a 500 from a rejected upstream call, which is what
+   * the buy button did when the default was set to a chain we had no wallet on.
+   */
+  const chain = String(body.chain ?? config.coinpay.defaultChain).toUpperCase();
+  if (!config.coinpay.chains.includes(chain)) {
+    return c.json({ error: `unsupported chain ${chain}`, chains: config.coinpay.chains }, 400);
+  }
+
+  try {
+    const { checkoutUrl, paymentRef } = await pay.createCheckout({
+      user,
+      amountCents: bundle.cents,
+      description: `${bundle.credits} bg0ne credits`,
+      metadata: { credits: String(bundle.credits) },
+      blockchain: chain,
+      successUrl: `${config.siteUrl}/account`,
+      cancelUrl: `${config.siteUrl}/pricing`,
+    });
+    return c.json({ checkout_url: checkoutUrl, payment_ref: paymentRef });
+  } catch (err) {
+    /*
+     * Say what went wrong.
+     *
+     * An unhandled throw here is a bare 500 and the page had nothing to show but a
+     * button that did nothing. Whatever CoinPay refused, the buyer is better served
+     * by reading it than by watching the click evaporate.
+     */
+    const message = String(err?.message ?? err);
+    console.error(`[topup] checkout failed for ${user.id} on ${chain}: ${message}`);
+    return c.json({ error: 'could not start checkout', detail: message.slice(0, 200) }, 502);
+  }
 });
 
 /**
