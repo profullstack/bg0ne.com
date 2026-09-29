@@ -251,8 +251,56 @@ export function verifyWebhook({ rawBody, signatureHeader, toleranceSeconds = 300
  * A webhook fires for failures and cancellations too, and granting on any VERIFIED
  * webhook is the mistake this set exists to prevent: the signature proves the
  * message is genuine, never that it says yes.
+ *
+ * `forwarded` is here because CoinPay sends TWO events for one payment --
+ * payment.confirmed, then payment.forwarded once the funds have gone on to the
+ * merchant wallet -- and forwarded is strictly later than confirmed, so it is paid
+ * by definition. Leaving it out is not a harmless omission: CoinPay's durable
+ * retry queue (webhook_deliveries, backing off for about a day) is where a failed
+ * payment.forwarded waits, while a failed payment.confirmed is only re-sent while
+ * the monitor still sees the payment as unsettled. A receiver that settles on
+ * confirmed alone can lose a real payment for good once confirmed has failed.
+ * Both count; the grant is idempotent per payment, so receiving both credits once.
  */
-const SETTLED = new Set(['paid', 'completed', 'confirmed', 'succeeded', 'settled']);
+const SETTLED = new Set(['paid', 'completed', 'confirmed', 'forwarded', 'succeeded', 'settled']);
+
+/**
+ * Pull the payment out of a webhook body, whichever envelope it arrived in.
+ *
+ * THE LIVE SHAPE IS NESTED, and this file used to read it flat. CoinPay sends:
+ *
+ *   { id: "evt_<paymentId>_<unixTs>",
+ *     type: "payment.confirmed",
+ *     data: { payment_id, status, amount, amount_usd, metadata, ... },
+ *     created_at, business_id }
+ *
+ * The top-level `id` is the EVENT, not the payment. Reading `payload.id`,
+ * `payload.status` and `payload.metadata` -- which is what stood here -- resolved
+ * the reference to `evt_...`, found no status and no metadata, and threw
+ * "webhook missing metadata" on every genuine confirmation. It failed inside a
+ * webhook handler, so the only symptom was that crypto payments never settled.
+ *
+ * The tests did not catch it because they were written against the flat shape
+ * too, which is worth remembering: a test that encodes the same wrong assumption
+ * as the code confirms the bug rather than finding it. The nested shape here is
+ * copied from the sender, `src/lib/webhooks/service.ts` in coinpayportal.
+ *
+ * Reading the flat fields FIRST would be worse than throwing: against a real
+ * webhook it matches the event id and would settle against a reference that
+ * belongs to nothing. So `data` wins wherever it exists, and the flat shape stays
+ * supported because the older test-webhook sender still uses it.
+ *
+ * @param {object} payload the parsed webhook body
+ * @returns {{ref: string, status: string, meta: object, event: string}}
+ */
+export function readWebhook(payload) {
+  const data = payload?.data ?? payload;
+  const ref = data?.payment_id ?? data?.id;
+  const status = String(data?.status ?? '').toLowerCase();
+  const meta = data?.metadata ?? payload?.metadata ?? {};
+  const event = String(payload?.type ?? payload?.event ?? '');
+  return { ref, status, meta, event };
+}
 
 /**
  * Record what a webhook says and, if money arrived, grant access -- atomically.
@@ -281,9 +329,7 @@ const SETTLED = new Set(['paid', 'completed', 'confirmed', 'succeeded', 'settled
 export async function settleWebhook(payload, { grant } = {}) {
   const { sql } = need();
 
-  const meta = payload?.metadata ?? {};
-  const ref = payload?.id ?? payload?.payment_id;
-  const status = String(payload?.status ?? '').toLowerCase();
+  const { meta, ref, status } = readWebhook(payload);
 
   if (!ref) throw new Error('webhook missing payment reference');
   if (!meta.user_id) throw new Error('webhook missing metadata');
@@ -296,6 +342,10 @@ export async function settleWebhook(payload, { grant } = {}) {
     `;
 
     if (!SETTLED.has(status)) return { settled: false, granted: false, reason: `status ${status}` };
+    // No row means no checkout of ours: nothing recorded what was charged, so there
+    // is nothing safe to grant against. Said plainly rather than handing `grant` an
+    // undefined payment to throw on, which answered 500 and was retried forever.
+    if (!payment) return { settled: false, granted: false, reason: `unknown payment ${ref}` };
     if (!grant) return { settled: true, granted: false, reason: 'nothing to grant' };
 
     const result = await grant(tx, { meta, payment, payload });
