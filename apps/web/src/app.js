@@ -427,15 +427,21 @@ app.post('/webhooks/coinpay', async (c) => {
       });
       // Only worth emailing about the first time. A retried webhook grants nothing and
       // must not send a second receipt for the same money.
-      if (granted.granted) receipt = { credits, amountCents: payment.amount_cents };
+      if (granted.granted) {
+        receipt = { userId: meta.user_id, credits, amountCents: payment.amount_cents };
+      }
       return granted.granted || { alreadyGranted: true };
     },
   });
 
   if (receipt) {
-    const email = await q.userEmail(payload?.metadata?.user_id);
+    // The user id comes from the grant, which read it out of the envelope. Reading
+    // `payload.metadata` here was the flat shape again: undefined on every real
+    // (nested) webhook, so no receipt was ever sent.
+    const { userId, ...details } = receipt;
+    const email = await q.userEmail(userId);
     if (email && config.mail.enabled) {
-      sendTopupReceipt({ email, ...receipt }).catch((err) =>
+      sendTopupReceipt({ email, ...details }).catch((err) =>
         console.error(`[mail] receipt not sent: ${err?.message ?? err}`),
       );
     }
