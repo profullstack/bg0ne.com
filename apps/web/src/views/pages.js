@@ -76,6 +76,7 @@ function page({ title, description, body, canonical }) {
 ${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✂️</text></svg>">
 <style>${STYLE}</style>
+<script data-site="68d4a3fa-7b29-4939-b0cd-ab3289bad021" src="https://crawlproof.com/stats.js" async></script>
 </head>
 <body>
 <header><div class="wrap">
