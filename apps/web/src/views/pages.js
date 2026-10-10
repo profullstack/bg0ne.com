@@ -5,6 +5,8 @@
  * a build step for that is a cost with nothing on the other side of it.
  */
 
+import { pfsFooter } from '../lib/pfs-footer.js';
+
 const esc = (s) =>
   String(s ?? '').replace(
     /[&<>"']/g,
@@ -47,8 +49,8 @@ select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius
 /* The checkerboard is what makes transparency legible; without it a cutout on a
    light page looks like it simply deleted the subject. */
 .checker{background-image:linear-gradient(45deg,#c8c8d4 25%,transparent 25%),linear-gradient(-45deg,#c8c8d4 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#c8c8d4 75%),linear-gradient(-45deg,transparent 75%,#c8c8d4 75%);background-size:18px 18px;background-position:0 0,0 9px,9px -9px,-9px 0}
-footer{margin:80px 0 40px;padding-top:24px;border-top:1px solid var(--line);color:var(--mut);font-size:14px}
-.webring{display:flex;gap:12px;font-size:13px}
+.blurb{margin-top:80px;font-size:14px}
+footer.pfs-footer{margin-bottom:24px;--pfs-footer-muted:var(--mut);border-top-color:var(--line)}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:24px 0 24px}
 .tab{padding:9px 14px;text-decoration:none;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
 .tab:hover{color:var(--fg)}
@@ -90,17 +92,9 @@ ${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
   </nav>
 </div></header>
 <main class="wrap">${body}</main>
-<footer class="wrap">
-  <p>Open source, MIT. Runs on open models you can host yourself.
-  Pay by the image in USDC, or run it on your own box for nothing.</p>
-  <p><a href="https://profullstack.com">Profullstack</a></p>
-  <nav class="webring" aria-label="Profullstack webring">
-    <a href="https://rssamplifier.com/ring/profullstack/previous?from=https%3A%2F%2Fbg0ne.com%2F" rel="prev" title="Previous site">&lt;&lt;</a>
-    <a href="https://rssamplifier.com/ring/profullstack">Profullstack</a>
-    <a href="https://rssamplifier.com/ring/profullstack/next?from=https%3A%2F%2Fbg0ne.com%2F" rel="next" title="Next site">&gt;&gt;</a>
-    <a href="https://rssamplifier.com/ring/profullstack/random?from=https%3A%2F%2Fbg0ne.com%2F" title="Random site" aria-label="Random site">&#x2684;</a>
-  </nav>
-</footer>
+<p class="wrap muted blurb">Runs on open models you can host yourself.
+Pay by the image in USDC, or run it on your own box for nothing.</p>
+${pfsFooter()}
 </body></html>`;
 }
 
