@@ -8,6 +8,7 @@
     "start": "bun src/main.js"
   },
   "dependencies": {
+    "@profullstack/footer": "latest",
     "@bg0ne/auth": "workspace:*",
     "@bg0ne/config": "workspace:*",
     "@bg0ne/cutout": "workspace:*",
