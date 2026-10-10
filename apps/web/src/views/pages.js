@@ -49,7 +49,9 @@ select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius
 /* The checkerboard is what makes transparency legible; without it a cutout on a
    light page looks like it simply deleted the subject. */
 .checker{background-image:linear-gradient(45deg,#c8c8d4 25%,transparent 25%),linear-gradient(-45deg,#c8c8d4 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#c8c8d4 75%),linear-gradient(-45deg,transparent 75%,#c8c8d4 75%);background-size:18px 18px;background-position:0 0,0 9px,9px -9px,-9px 0}
-.blurb{margin-top:80px;font-size:14px}
+.blurb{margin:80px auto 24px;font-size:14px}
+/* The header's bare nav rule (margin-left:auto, 15px) would push the footer's navs right. */
+footer.pfs-footer nav{margin-left:0;font-size:inherit}
 footer.pfs-footer{margin-bottom:24px;--pfs-footer-muted:var(--mut);border-top-color:var(--line)}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:24px 0 24px}
 .tab{padding:9px 14px;text-decoration:none;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
