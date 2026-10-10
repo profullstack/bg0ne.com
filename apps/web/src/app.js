@@ -93,6 +93,17 @@ const html = (c, body, status = 200) => c.html(body, status);
 
 app.get('/healthz', (c) => c.text('ok'));
 
+/** OpenWebring descriptor: bg0ne's membership in the Profullstack ring (the footer's links). */
+app.get('/.well-known/openwebring.json', (c) => {
+  c.header('cache-control', 'public, max-age=300');
+  return c.json({
+    openwebring: '0.1',
+    site: { url: 'https://bg0ne.com/', name: 'bg0ne' },
+    made_by: 'both',
+    rings: [{ ring: 'https://rssamplifier.com/ring/profullstack', slug: 'bg0ne-com' }],
+  });
+});
+
 app.get('/', (c) => html(c, Landing({ config })));
 app.get('/pricing', (c) => html(c, Pricing({ config })));
 app.get('/docs', (c) => html(c, Docs({ config })));

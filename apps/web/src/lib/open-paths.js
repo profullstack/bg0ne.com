@@ -28,4 +28,9 @@ export const OPEN_PATHS = [
 ];
 
 /** The subset the rate limiter also skips: liveness and crawler boilerplate. */
-export const UNMETERED_PATHS = ['/healthz', '/robots.txt', '/sitemap.xml'];
+export const UNMETERED_PATHS = [
+  '/healthz',
+  '/robots.txt',
+  '/sitemap.xml',
+  '/.well-known/openwebring.json',
+];
