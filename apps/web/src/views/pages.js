@@ -52,6 +52,8 @@ select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius
 .blurb{margin:80px auto 24px;font-size:14px}
 /* The header's bare nav rule (margin-left:auto, 15px) would push the footer's navs right. */
 footer.pfs-footer nav{margin-left:0;font-size:inherit}
+.cp-ad{height:0;overflow:hidden}
+.cp-ad[data-cp-filled]{height:auto;overflow:visible;min-height:40px;margin-top:56px}
 footer.pfs-footer{margin-bottom:24px;--pfs-footer-muted:var(--mut);border-top-color:var(--line)}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:24px 0 24px}
 .tab{padding:9px 14px;text-decoration:none;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -70,7 +72,18 @@ footer.pfs-footer{margin-bottom:24px;--pfs-footer-muted:var(--mut);border-top-co
 .sharebox input{font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);flex:1;min-width:240px}
 `;
 
-function page({ title, description, body, canonical }) {
+/**
+ * One CrawlProof ad unit (slot below, manage at https://crawlproof.com/ads/slots).
+ * text_link is the fluid format, so it fits the 900px column and a phone alike and
+ * carries its own "Sponsored" mark. Only public pages opt in via page({ ad: true });
+ * account, keys, history and sign-in never carry it. Zero height until ad.js marks
+ * it data-cp-filled, so an unsold or blocked slot leaves no hole.
+ */
+export const AD_SLOT = '8baac674-5682-428d-99c6-2a326d6e847e';
+const AD_UNIT = `<aside class="wrap cp-ad" data-cp-ad data-slot="${AD_SLOT}" data-format="text_link"></aside>
+<script src="https://crawlproof.com/ad.js" async></script>`;
+
+function page({ title, description, body, canonical, ad = false }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -94,6 +107,7 @@ ${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
   </nav>
 </div></header>
 <main class="wrap">${body}</main>
+${ad ? AD_UNIT : ''}
 <p class="wrap muted blurb">Runs on open models you can host yourself.
 Pay by the image in USDC, or run it on your own box for nothing.</p>
 ${pfsFooter()}
@@ -104,6 +118,7 @@ ${pfsFooter()}
 
 export function Landing({ config }) {
   return page({
+    ad: true,
     title: 'bg0ne — BG, gone',
     description:
       'Remove image backgrounds with open models. Free previews, pay by the image for full resolution, or self-host the whole thing.',
@@ -261,6 +276,7 @@ export function Pricing({ config }) {
     .join('');
 
   return page({
+    ad: true,
     title: 'Pricing - bg0ne',
     description: 'Pay by the image. Credits never expire and there is no subscription.',
     canonical: `${config.siteUrl}/pricing`,
@@ -321,6 +337,7 @@ document.querySelectorAll('button[data-cents]').forEach(b=>b.addEventListener('c
 export function Docs({ config }) {
   const base = config.siteUrl;
   return page({
+    ad: true,
     title: 'API — bg0ne',
     description: 'One endpoint. Pay with credits, an API key, or x402 per call.',
     canonical: `${base}/docs`,
@@ -552,6 +569,7 @@ export function SharePage({ share, config }) {
        </div>`;
 
   return page({
+    ad: true,
     title: 'A cutout - bg0ne',
     description: 'A background removed with bg0ne.',
     // No canonical and no indexing: the id is the only thing protecting the images.
