@@ -5,7 +5,7 @@
  * a build step for that is a cost with nothing on the other side of it.
  */
 
-import { pfsFooter } from '../lib/pfs-footer.js';
+import { pitFooter } from '../lib/pit-footer.js';
 
 const esc = (s) =>
   String(s ?? '').replace(
@@ -49,12 +49,10 @@ select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius
 /* The checkerboard is what makes transparency legible; without it a cutout on a
    light page looks like it simply deleted the subject. */
 .checker{background-image:linear-gradient(45deg,#c8c8d4 25%,transparent 25%),linear-gradient(-45deg,#c8c8d4 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#c8c8d4 75%),linear-gradient(-45deg,transparent 75%,#c8c8d4 75%);background-size:18px 18px;background-position:0 0,0 9px,9px -9px,-9px 0}
-.blurb{margin:80px auto 24px;font-size:14px}
-/* The header's bare nav rule (margin-left:auto, 15px) would push the footer's navs right. */
-footer.pfs-footer nav{margin-left:0;font-size:inherit}
+.foot{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:80px;padding-top:18px;padding-bottom:18px;border-top:1px solid var(--line);font-size:14px;color:var(--mut)}
+.foot a{color:var(--mut);text-decoration:none}.foot a:hover{color:var(--fg)}
 .cp-ad{height:0;overflow:hidden}
-.cp-ad[data-cp-filled]{height:auto;overflow:visible;min-height:40px;margin-top:56px}
-footer.pfs-footer{margin-bottom:24px;--pfs-footer-muted:var(--mut);border-top-color:var(--line)}
+.cp-ad[data-cp-filled]{height:auto;overflow:visible;min-height:40px;margin-top:20px}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:24px 0 24px}
 .tab{padding:9px 14px;text-decoration:none;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
 .tab:hover{color:var(--fg)}
@@ -75,7 +73,8 @@ footer.pfs-footer{margin-bottom:24px;--pfs-footer-muted:var(--mut);border-top-co
 /**
  * One CrawlProof ad unit (slot below, manage at https://crawlproof.com/ads/slots).
  * text_link is the fluid format, so it fits the 900px column and a phone alike and
- * carries its own "Sponsored" mark. Only public pages opt in via page({ ad: true });
+ * carries its own "Sponsored" mark. It sits at the top of the content, never against
+ * the footer. Only public pages opt in via page({ ad: true });
  * account, keys, history and sign-in never carry it. Zero height until ad.js marks
  * it data-cp-filled, so an unsold or blocked slot leaves no hole.
  */
@@ -106,11 +105,15 @@ ${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
     <a href="/account">Account</a>
   </nav>
 </div></header>
-<main class="wrap">${body}</main>
 ${ad ? AD_UNIT : ''}
-<p class="wrap muted blurb">Runs on open models you can host yourself.
-Pay by the image in USDC, or run it on your own box for nothing.</p>
-${pfsFooter()}
+<main class="wrap">${body}</main>
+<footer class="wrap foot">
+  <span>&copy; ${new Date().getFullYear()} Profullstack, Inc. &middot; MIT licensed</span>
+  <a href="/pricing">Pricing</a>
+  <a href="/docs">API</a>
+  <a href="https://github.com/profullstack/bg0ne.com">Source</a>
+</footer>
+${pitFooter()}
 </body></html>`;
 }
 
