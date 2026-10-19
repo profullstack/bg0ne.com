@@ -1,6 +1,6 @@
 {
   "name": "@bg0ne/web",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,6 @@
     "start": "bun src/main.js"
   },
   "dependencies": {
-    "@profullstack/footer": "latest",
     "@bg0ne/auth": "workspace:*",
     "@bg0ne/config": "workspace:*",
     "@bg0ne/cutout": "workspace:*",

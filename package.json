@@ -1,6 +1,6 @@
 {
   "name": "bg0ne.com",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "BG, gone. Background removal that runs on open models, self-hosts, and bills by the image.",
