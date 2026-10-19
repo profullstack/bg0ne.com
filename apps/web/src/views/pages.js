@@ -5,6 +5,7 @@
  * a build step for that is a cost with nothing on the other side of it.
  */
 
+import { pfsFooter } from '../lib/pfs-footer.js';
 import { pitFooter } from '../lib/pit-footer.js';
 
 const esc = (s) =>
@@ -49,8 +50,12 @@ select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius
 /* The checkerboard is what makes transparency legible; without it a cutout on a
    light page looks like it simply deleted the subject. */
 .checker{background-image:linear-gradient(45deg,#c8c8d4 25%,transparent 25%),linear-gradient(-45deg,#c8c8d4 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#c8c8d4 75%),linear-gradient(-45deg,transparent 75%,#c8c8d4 75%);background-size:18px 18px;background-position:0 0,0 9px,9px -9px,-9px 0}
-.foot{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:80px;padding-top:18px;padding-bottom:18px;border-top:1px solid var(--line);font-size:14px;color:var(--mut)}
-.foot a{color:var(--mut);text-decoration:none}.foot a:hover{color:var(--fg)}
+/* The site footer is the shared @profullstack/footer (links, << Profullstack >> ring,
+   copyright), laid out as one wrapping row. The header's bare nav rule
+   (margin-left:auto, 15px) would push its navs right. */
+footer.pfs-footer{margin-top:80px;--pfs-footer-muted:var(--mut);border-top-color:var(--line)}
+footer.pfs-footer nav{margin-left:0;font-size:inherit}
+footer.pfs-footer .pfs-footer__inner{flex-direction:row;flex-wrap:wrap;justify-content:center;gap:6px 18px}
 .cp-ad{height:0;overflow:hidden}
 .cp-ad[data-cp-filled]{height:auto;overflow:visible;min-height:40px;margin-top:20px}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:24px 0 24px}
@@ -107,12 +112,7 @@ ${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
 </div></header>
 ${ad ? AD_UNIT : ''}
 <main class="wrap">${body}</main>
-<footer class="wrap foot">
-  <span>&copy; ${new Date().getFullYear()} Profullstack, Inc. &middot; MIT licensed</span>
-  <a href="/pricing">Pricing</a>
-  <a href="/docs">API</a>
-  <a href="https://github.com/profullstack/bg0ne.com">Source</a>
-</footer>
+${pfsFooter()}
 ${pitFooter()}
 </body></html>`;
 }
