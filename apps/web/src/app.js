@@ -5,6 +5,7 @@ import { sendLoginLink, sendTopupReceipt } from '@bg0ne/notify';
 import { cutout, CutoutError } from '@bg0ne/cutout';
 import * as pay from '@bg0ne/payments';
 import { createGateway } from '@profullstack/x402-gateway';
+import { x402Gateway } from '@profullstack/x402-gateway/hono';
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { throttle } from '@profullstack/throttle/hono';
@@ -68,6 +69,30 @@ const gateway = config.x402.enabled
       openPaths: OPEN_PATHS,
     })
   : null;
+
+/**
+ * The crawl door: the fleet's day pass ($1 a day over x402, or any coin / PayPal through
+ * CoinPay's hosted checkout on /crawl) for AI training crawlers, headless browsers and
+ * SEO scrapers. People, verified Googlebot/Bingbot and the AI chat/search fetchers pass
+ * through untouched; a signed-in session is never charged.
+ *
+ * Separate from the cutout gateway above, which prices a single HD cutout for the
+ * throttle. Same key, so the pass secret is the same and either pass opens both.
+ */
+export const crawlGateway =
+  config.x402.scopedKey && config.x402.payTo
+    ? createGateway({
+        siteUrl: config.siteUrl,
+        siteName: 'bg0ne',
+        coinpay: { apiKey: config.x402.scopedKey, baseUrl: config.coinpay.baseUrl },
+        payTo: config.x402.payTo,
+        contact: 'mailto:anthony@profullstack.com',
+        openPaths: [...OPEN_PATHS, ...UNMETERED_PATHS],
+        exempt: (request) =>
+          Boolean(request.headers.get('cookie')?.includes(config.session.cookie)),
+      })
+    : null;
+if (crawlGateway) app.use('*', x402Gateway(crawlGateway));
 
 /**
  * Meter everything, and sell a pass to whoever goes over.

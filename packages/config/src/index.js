@@ -203,7 +203,7 @@ export const config = {
      * wallets up. So unlike a checkout, this one genuinely is configuration.
      */
     get payTo() {
-      return process.env.X402_PAY_TO ?? '';
+      return process.env.X402_PAY_TO || process.env.CRAWL_PAY_TO || '';
     },
     get enabled() {
       return bool('X402_ENABLED', false) && Boolean(this.payTo && this.scopedKey);
