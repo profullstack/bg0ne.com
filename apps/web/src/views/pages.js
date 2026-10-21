@@ -128,8 +128,8 @@ export function Landing({ config }) {
     body: `
 <h1>BG, gone.</h1>
 <p class="lede">Drop an image, get it back without its background. Previews are free and
-unlimited. Full resolution costs ${config.pricing.hdCents}&cent; an image, paid in USDC,
-with no subscription and no expiring credits. The whole thing is MIT licensed, so you can
+unlimited. Full resolution costs ${config.pricing.hdCents}&cent; an image, paid in any major coin or
+PayPal, with no subscription and no expiring credits. The whole thing is MIT licensed, so you can
 also just run it yourself.</p>
 
 <div id="drop" class="drop">
@@ -251,32 +251,6 @@ export function Pricing({ config }) {
     )
     .join('');
 
-  // Only chains this business actually holds a wallet for. Offering one it does not
-  // is a button that fails at the moment somebody presses it.
-  const LABELS = {
-    USDC_POL: 'USDC on Polygon',
-    USDC_SOL: 'USDC on Solana',
-    USDC_ETH: 'USDC on Ethereum',
-    USDT_POL: 'USDT on Polygon',
-    USDT_SOL: 'USDT on Solana',
-    USDT_ETH: 'USDT on Ethereum',
-    SOL: 'Solana',
-    POL: 'Polygon',
-    ETH: 'Ethereum',
-    BTC: 'Bitcoin',
-    BCH: 'Bitcoin Cash',
-    DOGE: 'Dogecoin',
-    XRP: 'XRP',
-    ADA: 'Cardano',
-    BNB: 'BNB',
-  };
-  const options = config.coinpay.chains
-    .map(
-      (ch) =>
-        `<option value="${ch}"${ch === config.coinpay.defaultChain ? ' selected' : ''}>${esc(LABELS[ch] ?? ch)}</option>`,
-    )
-    .join('');
-
   return page({
     ad: true,
     title: 'Pricing - bg0ne',
@@ -288,10 +262,8 @@ export function Pricing({ config }) {
 nothing to cancel, and previews stay free whether you have credits or not.</p>
 
 <div class="card">
-<p style="margin:0 0 14px">
-  <label for="chain" class="muted">Pay with</label><br>
-  <select id="chain" style="margin-top:6px">${options}</select>
-</p>
+<p class="muted" style="margin:0 0 14px">Pay with any major coin or PayPal. You pick on the
+CoinPay checkout page.</p>
 <table>
 <tr><th>Top up</th><th>Credits</th><th>Per image</th><th></th></tr>
 ${rows}
@@ -317,7 +289,6 @@ document.querySelectorAll('button[data-cents]').forEach(b=>b.addEventListener('c
   try{
     const body=new FormData();
     body.append('cents',b.dataset.cents);
-    body.append('chain',document.getElementById('chain').value);
     const res=await fetch('/api/topup',{method:'POST',body});
     if(res.status===401){location.href='/signin';return}
     const j=await res.json().catch(()=>({}));
