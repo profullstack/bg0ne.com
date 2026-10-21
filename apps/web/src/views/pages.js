@@ -57,7 +57,7 @@ footer.pfs-footer{margin-top:80px;--pfs-footer-muted:var(--mut);border-top-color
 footer.pfs-footer nav{margin-left:0;font-size:inherit}
 footer.pfs-footer .pfs-footer__inner{flex-direction:row;flex-wrap:wrap;justify-content:center;gap:6px 18px}
 .cp-ad{height:0;overflow:hidden}
-.cp-ad[data-cp-filled]{height:auto;overflow:visible;min-height:40px;margin-top:20px}
+.cp-ad[data-cp-filled]{height:auto;overflow:visible;min-height:40px;margin-top:10px}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:24px 0 24px}
 .tab{padding:9px 14px;text-decoration:none;color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-1px}
 .tab:hover{color:var(--fg)}
@@ -79,8 +79,8 @@ footer.pfs-footer .pfs-footer__inner{flex-direction:row;flex-wrap:wrap;justify-c
  * One CrawlProof ad unit (slot below, manage at https://crawlproof.com/ads/slots).
  * text_link is the fluid format, so it fits the 900px column and a phone alike and
  * carries its own "Sponsored" mark. It sits at the top of the content, never against
- * the footer. Only public pages opt in via page({ ad: true });
- * account, keys, history and sign-in never carry it. Zero height until ad.js marks
+ * the footer. Only public inner pages opt in via page({ ad: true }); the
+ * homepage, account, keys, history and sign-in never carry it. Zero height until ad.js marks
  * it data-cp-filled, so an unsold or blocked slot leaves no hole.
  */
 export const AD_SLOT = '8baac674-5682-428d-99c6-2a326d6e847e';
@@ -121,7 +121,6 @@ ${pitFooter()}
 
 export function Landing({ config }) {
   return page({
-    ad: true,
     title: 'bg0ne — BG, gone',
     description:
       'Remove image backgrounds with open models. Free previews, pay by the image for full resolution, or self-host the whole thing.',
