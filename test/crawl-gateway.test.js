@@ -48,3 +48,13 @@ test('a browser with Sec-Fetch headers is not charged', async () => {
   const res = await app.request('/healthz', { headers: CHROME });
   expect(res.status).toBe(200);
 });
+
+test('a made-up pass header is not a paid cutout', async () => {
+  const { hasCutoutPass } = await import('../apps/web/src/app.js');
+  const req = new Request('https://bg0ne.test/api/cutout', {
+    headers: { 'x-crawl-pass': 'cp_junk.junk' },
+  });
+  expect(await hasCutoutPass(req)).toBe(false);
+  const pay = new Request('https://bg0ne.test/api/cutout', { headers: { 'x-payment': 'e30=' } });
+  expect(await hasCutoutPass(pay)).toBe(false);
+});

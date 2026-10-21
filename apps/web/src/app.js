@@ -76,8 +76,7 @@ const gateway = config.x402.enabled
  * SEO scrapers. People, verified Googlebot/Bingbot and the AI chat/search fetchers pass
  * through untouched; a signed-in session is never charged.
  *
- * Separate from the cutout gateway above, which prices a single HD cutout for the
- * throttle. Same key, so the pass secret is the same and either pass opens both.
+ * Separate from the cutout gateway above, which prices HD cutouts for the throttle.
  */
 export const crawlGateway =
   config.x402.scopedKey && config.x402.payTo
@@ -86,6 +85,8 @@ export const crawlGateway =
         siteName: 'bg0ne',
         coinpay: { apiKey: config.x402.scopedKey, baseUrl: config.coinpay.baseUrl },
         payTo: config.x402.payTo,
+        // Its own pass secret: a crawl pass reads pages, it does not buy HD cutouts.
+        secret: `${config.x402.scopedKey}:crawl`,
         contact: 'mailto:anthony@profullstack.com',
         openPaths: [...OPEN_PATHS, ...UNMETERED_PATHS],
         exempt: (request) =>
@@ -93,6 +94,12 @@ export const crawlGateway =
       })
     : null;
 if (crawlGateway) app.use('*', x402Gateway(crawlGateway));
+
+/** A cutout pass this site minted (or a Power Key), not merely a header naming one. */
+export async function hasCutoutPass(request) {
+  const token = gateway?.passFrom(request);
+  return Boolean(token && (await gateway.verifyPass(token).catch(() => false)));
+}
 
 /**
  * Meter everything, and sell a pass to whoever goes over.
@@ -243,8 +250,9 @@ app.post('/api/cutout', async (c) => {
   const { user, apiKeyId } = await caller(c);
   const asked = String(body.tier ?? 'auto');
 
-  // A live x402 pass means this request is already paid for. The gateway put it there.
-  const paidAgent = Boolean(c.req.header('x-crawl-pass') || c.req.header('x-payment'));
+  // A live x402 pass means this request is already paid for. Verified here, not just
+  // seen: the throttle lets an under-limit request through whatever header it carries.
+  const paidAgent = await hasCutoutPass(c.req.raw);
 
   // Only spend if full resolution is actually on the table; a spend for a caller who
   // was going to get a preview anyway is a charge for nothing.
