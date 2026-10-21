@@ -361,26 +361,15 @@ app.post('/api/topup', async (c) => {
   // caller name its own price for a fixed number of credits.
   if (!bundle) return c.json({ error: 'pick one of the published bundles' }, 400);
 
-  /*
-   * The chain has to be one this business actually holds a wallet for.
-   *
-   * CoinPay resolves the payee from the business's own wallets and refuses anything
-   * else with a 400 at the moment of purchase. Checking here means a bad chain is a
-   * clear 400 from us rather than a 500 from a rejected upstream call, which is what
-   * the buy button did when the default was set to a chain we had no wallet on.
-   */
-  const chain = String(body.chain ?? config.coinpay.defaultChain).toUpperCase();
-  if (!config.coinpay.chains.includes(chain)) {
-    return c.json({ error: `unsupported chain ${chain}`, chains: config.coinpay.chains }, 400);
-  }
-
   try {
     const { checkoutUrl, paymentRef } = await pay.createCheckout({
       user,
+      // Who paid, for CoinPay's records; the hosted page offers every coin + PayPal.
+      email: user.email,
+      accountId: String(user.id),
       amountCents: bundle.cents,
       description: `${bundle.credits} bg0ne credits`,
       metadata: { credits: String(bundle.credits) },
-      blockchain: chain,
       successUrl: `${config.siteUrl}/account`,
       cancelUrl: `${config.siteUrl}/pricing`,
     });
@@ -394,7 +383,7 @@ app.post('/api/topup', async (c) => {
      * by reading it than by watching the click evaporate.
      */
     const message = String(err?.message ?? err);
-    console.error(`[topup] checkout failed for ${user.id} on ${chain}: ${message}`);
+    console.error(`[topup] checkout failed for ${user.id}: ${message}`);
     return c.json({ error: 'could not start checkout', detail: message.slice(0, 200) }, 502);
   }
 });
