@@ -15,7 +15,7 @@
     "@bg0ne/db": "workspace:*",
     "@bg0ne/notify": "workspace:*",
     "@bg0ne/payments": "workspace:*",
-    "@profullstack/throttle": "^0.3.3",
+    "@profullstack/throttle": "^0.3.4",
     "@profullstack/x402-gateway": "^0.11.0",
     "hono": "^4.10.3"
   }
