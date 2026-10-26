@@ -1,9 +1,16 @@
 import * as auth from '@bg0ne/auth';
 import { config } from '@bg0ne/config';
+import { sql } from '@bg0ne/db';
 import * as q from '@bg0ne/db/queries';
 import { sendLoginLink, sendTopupReceipt } from '@bg0ne/notify';
 import { cutout, CutoutError } from '@bg0ne/cutout';
 import * as pay from '@bg0ne/payments';
+import {
+  createProfileStore,
+  mountProfileRoutes,
+  saveSignupProfile,
+  validateProfile,
+} from '@profullstack/profile';
 import { createGateway } from '@profullstack/x402-gateway';
 import { x402Gateway } from '@profullstack/x402-gateway/hono';
 import { Hono } from 'hono';
@@ -140,16 +147,57 @@ app.get('/', (c) => html(c, Landing({ config })));
 app.get('/pricing', (c) => html(c, Pricing({ config })));
 app.get('/docs', (c) => html(c, Docs({ config })));
 
-app.get('/signin', (c) => html(c, SignIn({})));
+app.get('/signin', (c) => html(c, SignIn({ mode: c.req.query('mode') })));
+app.get('/signup', (c) => html(c, SignIn({ mode: 'signup' })));
 
 app.get('/account', async (c) => {
   const { user } = await caller(c);
   if (!user) return c.redirect('/signin');
-  const [balance, ledger] = await Promise.all([
+  const [balance, ledger, contact] = await Promise.all([
     q.creditBalance(user.id),
     q.creditHistory(user.id),
+    profiles.get(user.id),
   ]);
-  return html(c, Account({ user, balance, ledger, config }));
+  return html(
+    c,
+    Account({
+      user,
+      balance,
+      ledger,
+      config,
+      contact: contact ?? { email: user.email },
+      contactError: c.req.query('contact_error') ?? null,
+      contactSaved: c.req.query('contact') === 'saved',
+    }),
+  );
+});
+
+/*
+ * The shared Profullstack profile (@profullstack/profile): email, names, company
+ * domain, job title and LinkedIn, in user_profiles. GET/PUT/PATCH /api/v1/me/profile
+ * are the package's own handlers; the account form below is the same validation for
+ * a page without script.
+ */
+const profiles = createProfileStore(sql);
+mountProfileRoutes(app, {
+  store: profiles,
+  getUser: async (_req, c) => {
+    const { user } = await caller(c);
+    return user ? { id: user.id, email: user.email } : null;
+  },
+});
+
+app.post('/account/contact', async (c) => {
+  const { user } = await caller(c);
+  if (!user) return c.redirect('/signin');
+  const form = await c.req.parseBody();
+  const check = validateProfile({ ...form, email: user.email });
+  if (!check.ok) {
+    const first = Object.values(check.errors)[0];
+    return c.redirect(`/account?contact_error=${encodeURIComponent(first)}#contact`);
+  }
+  await profiles.save(user.id, check.profile);
+  return c.redirect('/account?contact=saved#contact');
 });
 
 /**
@@ -178,6 +226,21 @@ app.get('/account/keys', async (c) => {
 
 app.post('/auth/link', async (c) => {
   const form = await c.req.parseBody();
+
+  /*
+   * Signup mode carries the shared profile fields; plain sign-in does not and is never
+   * asked for them. They are checked before any link exists, and a refusal goes back
+   * to the form with what was typed -- the same answer for a known or unknown address.
+   */
+  let profile = null;
+  if (form.mode === 'signup') {
+    const check = validateProfile(form);
+    if (!check.ok) {
+      return html(c, SignIn({ mode: 'signup', values: form, errors: check.errors }), 400);
+    }
+    profile = check.profile;
+  }
+
   const email = String(form.email ?? '').trim();
 
   /*
@@ -189,7 +252,7 @@ app.post('/auth/link', async (c) => {
    */
   if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     try {
-      const url = await auth.createLoginLink(email);
+      const url = await auth.createLoginLink(email, { profile });
       if (config.mail.enabled) await sendLoginLink({ email, url });
       else console.log(`[auth] mail disabled; link for ${email}: ${url}`);
     } catch (err) {
@@ -205,6 +268,14 @@ app.get('/auth/magic', async (c) => {
     ? await auth.consumeLoginLink(token, { userAgent: c.req.header('user-agent') })
     : null;
   if (!session) return html(c, SignIn({ error: 'That link has expired or was already used.' }), 400);
+  // The fields typed on the signup form, saved now that the account exists and the
+  // link has proved the mailbox. A failure here must not cost anybody their sign-in:
+  // the account page asks again.
+  if (session.profile) {
+    await saveSignupProfile(profiles, session.user.id, session.profile, {
+      email: session.user.email,
+    }).catch((err) => console.error(`[auth] signup profile save failed: ${err?.message ?? err}`));
+  }
   c.header('set-cookie', auth.sessionCookie(session.sessionId));
   return c.redirect('/account');
 });
@@ -552,7 +623,7 @@ app.get('/robots.txt', (c) =>
 );
 
 app.get('/sitemap.xml', (c) => {
-  const urls = ['/', '/pricing', '/docs', '/signin'];
+  const urls = ['/', '/pricing', '/docs', '/signin', '/signup'];
   c.header('content-type', 'application/xml');
   return c.body(
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls

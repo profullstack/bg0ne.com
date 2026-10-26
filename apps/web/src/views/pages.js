@@ -5,6 +5,11 @@
  * a build step for that is a cost with nothing on the other side of it.
  */
 
+import {
+  COLUMNS as PROFILE_COLUMNS,
+  PROFILE_ENHANCE_SCRIPT,
+  renderProfileFields,
+} from '@profullstack/profile';
 import { pfsFooter } from '../lib/pfs-footer.js';
 import { pitFooter } from '../lib/pit-footer.js';
 
@@ -72,6 +77,13 @@ footer.pfs-footer .pfs-footer__inner{flex-direction:row;flex-wrap:wrap;justify-c
 .ba figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
 .ba img{width:100%;height:320px;object-fit:contain;border-radius:9px;display:block}
 .ba figcaption{margin-top:10px;font-size:14px;font-weight:600}
+/* The shared profile fields (@profullstack/profile renderProfileFields), made to read
+   like the email box above them. */
+.pfs-profile{border:0;padding:0;margin:0;min-width:0}
+.pfs-profile__row label{display:block;color:var(--mut)}
+.pfs-profile__row input{font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--fg);width:100%;margin:8px 0 14px}
+.pfs-profile__optional{font-size:14px}
+.pfs-profile__error{color:#c33;font-size:14px;margin:-8px 0 14px}
 .sharebox input{font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);flex:1;min-width:240px}
 `;
 
@@ -372,7 +384,7 @@ function AccountNav(active) {
     .join('')}</nav>`;
 }
 
-export function Account({ user, balance, ledger, config }) {
+export function Account({ user, balance, ledger, config, contact, contactError, contactSaved }) {
   const rows = ledger
     .map(
       (h) =>
@@ -399,6 +411,15 @@ ${AccountNav('/account')}
 <div class="card">
 ${ledger.length ? `<table><tr><th>Change</th><th>Reason</th><th>When</th></tr>${rows}</table>` : '<p class="muted" style="margin:0">Nothing yet.</p>'}
 </div>
+
+<h2 id="contact">Contact details</h2>
+<p class="muted">Private to your account. Sent with ${esc(user.email)}.</p>
+${contactError ? `<p class="card" style="border-color:#c33">${esc(contactError)}</p>` : ''}
+${contactSaved ? '<p class="muted">Contact details saved.</p>' : ''}
+<form method="post" action="/account/contact" class="card" style="max-width:420px">
+  ${renderProfileFields({ fields: SIGNUP_FIELDS, values: contact ?? {} })}
+  <button class="btn" type="submit">Save contact details</button>
+</form>
 
 <p style="margin-top:32px"><form method="post" action="/auth/signout"><button class="btn ghost">Sign out</button></form></p>`,
   });
@@ -591,20 +612,35 @@ deleted. That is deliberate: they are your images, not ours.</p>
 
 /* -------------------------------------------------------------------- auth -- */
 
-export function SignIn({ error }) {
+/*
+ * The rest of the shared profile, asked for in signup mode only. Email is this form's
+ * own box, so the package renders the other five. A plain sign-in never sees or needs
+ * them: the same link still makes an account for an address it has not seen.
+ */
+const SIGNUP_FIELDS = PROFILE_COLUMNS.filter((f) => f !== 'email');
+
+export function SignIn({ error, mode, values, errors }) {
+  const signup = mode === 'signup';
   return page({
-    title: 'Sign in — bg0ne',
-    description: 'Sign in with an emailed link.',
+    title: signup ? 'Create your account — bg0ne' : 'Sign in — bg0ne',
+    description: signup
+      ? 'Create a bg0ne account with an emailed link.'
+      : 'Sign in with an emailed link.',
     body: `
-<h1>Sign in</h1>
+<h1>${signup ? 'Create your account' : 'Sign in'}</h1>
 <p class="lede">We email you a link. There is no password to choose, forget or leak, and
 the same link makes the account if you do not have one yet.</p>
 ${error ? `<p class="card" style="border-color:#c33">${esc(error)}</p>` : ''}
 <form method="post" action="/auth/link" class="card" style="max-width:420px">
+  ${signup ? '<input type="hidden" name="mode" value="signup">' : ''}
   <label for="email" class="muted">Email</label>
-  <input id="email" name="email" type="email" required autocomplete="email" placeholder="you@example.com" style="margin:8px 0 14px">
+  <input id="email" name="email" type="email" required autocomplete="email" placeholder="you@example.com" style="margin:8px 0 14px"${values?.email ? ` value="${esc(values.email)}"` : ''}>
+  ${errors?.email ? `<p class="pfs-profile__error" role="alert">${esc(errors.email)}</p>` : ''}
+  ${signup ? renderProfileFields({ fields: SIGNUP_FIELDS, values, errors }) : ''}
   <button class="btn" type="submit">Email me a link</button>
-</form>`,
+</form>
+<p class="muted">${signup ? 'Already have an account? <a href="/signin">Sign in</a>' : 'New here? <a href="/signup">Create an account</a>'}</p>
+${signup ? `<script>${PROFILE_ENHANCE_SCRIPT}</script>` : ''}`,
   });
 }
 
