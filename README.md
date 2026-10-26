@@ -99,6 +99,22 @@ Credit grants are idempotent per payment, enforced by a unique index rather than
 remembering. CoinPay retries a webhook until it is acknowledged, so "we already
 granted this" has to be a database constraint.
 
+## Credit codes and invites
+
+- **Credit codes** (`BG-XXXX-XXXX-XXXX-XXXX`, from `@profullstack/redeem-credits`, stored only as
+  hashes) add credits (one credit = one full-resolution cutout) to `credit_ledger`, once per account
+  per code. Redeem on `/account` ("Have a code?") or `POST /api/v1/credits/redeem {"code":"BG-..."}`.
+  Mint on the box:
+  `docker exec bg0necom-app-1 bun apps/web/src/admin/codes.js mint --credits 100 --label "for Ada"`
+  (`list`, `revoke <id>`, `reconcile <user id>`, `quota <user id> <total>`).
+- **Invites** (`@profullstack/affiliates`): three single-use links per account at `/invites`, each
+  `/i/<code>` for 30 days. The code rides the emailed sign-in link, and pays `INVITE_BONUS_CREDITS`
+  (default 10) to both people only when that link creates the account, the two are not one mailbox,
+  the new address is not a throwaway one, the inviter's account is a day old
+  (`INVITE_MIN_INVITER_AGE_HOURS`) and the inviter has had fewer than 10 bonuses in 30 days.
+- **`?ref=`** links are first touch, kept in the `referral_code` cookie and recorded in
+  `aff_attributions` when the link creates an account.
+
 ## Environment
 
 | Variable | Required | |

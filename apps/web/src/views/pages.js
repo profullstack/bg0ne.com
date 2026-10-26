@@ -257,7 +257,7 @@ export function Pricing({ config }) {
       (t) => `<tr>
         <td><strong>$${(t.cents / 100).toFixed(2)}</strong></td>
         <td>${t.credits.toLocaleString()} images</td>
-        <td class="muted">$${((t.cents / t.credits) / 100).toFixed(4)} each</td>
+        <td class="muted">$${(t.cents / t.credits / 100).toFixed(4)} each</td>
         <td><button class="btn" data-cents="${t.cents}">Buy</button></td>
       </tr>`,
     )
@@ -375,6 +375,7 @@ function AccountNav(active) {
     ['/account', 'Credits'],
     ['/account/history', 'History'],
     ['/account/keys', 'API keys'],
+    ['/invites', 'Invites'],
   ];
   return `<nav class="tabs">${tabs
     .map(
@@ -384,7 +385,18 @@ function AccountNav(active) {
     .join('')}</nav>`;
 }
 
-export function Account({ user, balance, ledger, config, contact, contactError, contactSaved }) {
+export function Account({
+  user,
+  balance,
+  ledger,
+  config,
+  contact,
+  contactError,
+  contactSaved,
+  redeemError = null,
+  redeemed = 0,
+  invited = 0,
+}) {
   const rows = ledger
     .map(
       (h) =>
@@ -399,6 +411,7 @@ export function Account({ user, balance, ledger, config, contact, contactError, 
 <h1>Account</h1>
 <p class="lede">${esc(user.email)}</p>
 ${AccountNav('/account')}
+${invited ? `<p class="card">Welcome. Your invite added ${invited.toLocaleString()} credits, and the friend who invited you got the same.</p>` : ''}
 
 <div class="card">
   <div class="muted">Credits</div>
@@ -406,6 +419,16 @@ ${AccountNav('/account')}
   <p class="muted" style="margin:4px 0 0">One credit, one full-resolution image. They do not expire.</p>
   <p style="margin:14px 0 0"><a class="btn" href="/pricing">Top up</a></p>
 </div>
+
+<h2 id="code">Have a code?</h2>
+${redeemed ? `<p class="muted">Code redeemed: ${redeemed.toLocaleString()} credits added.</p>` : ''}
+${redeemError ? `<p class="card" style="border-color:#c33">${esc(redeemError)}</p>` : ''}
+<form method="post" action="/account/redeem" class="card" style="max-width:420px">
+  <label for="code" class="muted">Credit code</label>
+  <input id="code" name="code" type="text" required maxlength="48" autocomplete="off" spellcheck="false" placeholder="BG-XXXX-XXXX-XXXX-XXXX" style="margin:8px 0 14px">
+  <button class="btn" type="submit">Redeem</button>
+  <p class="muted" style="margin:12px 0 0;font-size:14px">The credits land on this account and never expire. Want to bring someone? <a href="/invites">You have invites</a>.</p>
+</form>
 
 <h2>Credit history</h2>
 <div class="card">
@@ -619,7 +642,7 @@ deleted. That is deliberate: they are your images, not ours.</p>
  */
 const SIGNUP_FIELDS = PROFILE_COLUMNS.filter((f) => f !== 'email');
 
-export function SignIn({ error, mode, values, errors }) {
+export function SignIn({ error, mode, values, errors, invite = null, bonus = 0 }) {
   const signup = mode === 'signup';
   return page({
     title: signup ? 'Create your account — bg0ne' : 'Sign in — bg0ne',
@@ -627,12 +650,14 @@ export function SignIn({ error, mode, values, errors }) {
       ? 'Create a bg0ne account with an emailed link.'
       : 'Sign in with an emailed link.',
     body: `
-<h1>${signup ? 'Create your account' : 'Sign in'}</h1>
+<h1>${invite ? 'You were invited' : signup ? 'Create your account' : 'Sign in'}</h1>
+${invite ? `<p class="card">Someone wanted you on bg0ne.${bonus > 0 ? ` Make your account with this link and you both get <strong>${bonus}</strong> free full-resolution cutouts.` : ''}</p>` : ''}
 <p class="lede">We email you a link. There is no password to choose, forget or leak, and
 the same link makes the account if you do not have one yet.</p>
 ${error ? `<p class="card" style="border-color:#c33">${esc(error)}</p>` : ''}
 <form method="post" action="/auth/link" class="card" style="max-width:420px">
   ${signup ? '<input type="hidden" name="mode" value="signup">' : ''}
+  ${invite ? `<input type="hidden" name="invite" value="${esc(invite)}">` : ''}
   <label for="email" class="muted">Email</label>
   <input id="email" name="email" type="email" required autocomplete="email" placeholder="you@example.com" style="margin:8px 0 14px"${values?.email ? ` value="${esc(values.email)}"` : ''}>
   ${errors?.email ? `<p class="pfs-profile__error" role="alert">${esc(errors.email)}</p>` : ''}
@@ -641,6 +666,57 @@ ${error ? `<p class="card" style="border-color:#c33">${esc(error)}</p>` : ''}
 </form>
 <p class="muted">${signup ? 'Already have an account? <a href="/signin">Sign in</a>' : 'New here? <a href="/signup">Create an account</a>'}</p>
 ${signup ? `<script>${PROFILE_ENHANCE_SCRIPT}</script>` : ''}`,
+  });
+}
+
+export function Invites({ user, summary, created = null, error = null }) {
+  const { quota, invites, bonus_credits: bonus } = summary;
+  const now = new Date().toISOString();
+  const rows = invites
+    .map((i) => {
+      const state = i.used
+        ? 'joined'
+        : i.revoked
+          ? 'withdrawn'
+          : i.expires_at && i.expires_at < now
+            ? 'expired'
+            : 'waiting';
+      return `<tr><td>${esc(i.note) || '<span class="muted">no note</span>'}</td><td class="muted">${state}</td>
+        <td class="muted">${esc(String(i.created_at).slice(0, 10))}</td></tr>`;
+    })
+    .join('');
+  return page({
+    title: 'Invites - bg0ne',
+    description: 'Invite someone to bg0ne. You both get credits.',
+    body: `
+<h1>Invites</h1>
+<p class="lede">${esc(user.email)}</p>
+${AccountNav('/invites')}
+${error ? `<p class="card" style="border-color:#c33">${esc(error)}</p>` : ''}
+${
+  created
+    ? `<div class="card"><strong>Your invite link</strong>, shown once. Send it to one person:
+  <pre style="margin:10px 0 0;white-space:pre-wrap;word-break:break-all">${esc(created.url)}</pre></div>`
+    : ''
+}
+<div class="card">
+  <p style="margin:0 0 12px">You have <strong>${quota.left}</strong> of ${quota.total} invites left. Each link works once, for 30 days.${bonus > 0 ? ` When someone makes an account through it, you each get <strong>${bonus}</strong> credits.` : ''}</p>
+  ${
+    quota.left > 0
+      ? `<form method="post" action="/invites" style="margin:0;display:flex;gap:8px;flex-wrap:wrap">
+    <input type="text" name="note" maxlength="120" placeholder="Who is it for? (only you see this)" style="flex:1;min-width:200px">
+    <button class="btn" type="submit">Make an invite link</button>
+  </form>`
+      : '<p class="muted" style="margin:0">All used. Invites are scarce on purpose.</p>'
+  }
+</div>
+${invites.length ? `<h2>Sent</h2><div class="card"><table><tr><th>For</th><th>State</th><th>Made</th></tr>${rows}</table></div>` : ''}
+<h2>Your link</h2>
+<div class="card">
+  <p class="muted" style="margin:0 0 10px">Open and unlimited: anyone who signs up after following it is credited to you.</p>
+  <pre style="margin:0;white-space:pre-wrap;word-break:break-all">${esc(summary.affiliate_url)}</pre>
+  ${summary.joined ? `<p class="muted" style="margin:10px 0 0">${summary.joined} ${summary.joined === 1 ? 'person has' : 'people have'} joined on your invites.</p>` : ''}
+</div>`,
   });
 }
 

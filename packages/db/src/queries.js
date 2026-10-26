@@ -26,10 +26,18 @@ export async function findOrCreateUser(email) {
  * and cast twice: Bun SQL JSON-encodes a string bound straight to ::jsonb, storing a
  * jsonb STRING instead of an object.
  */
-export async function insertLoginToken({ tokenHash, email, expiresAt, profile = null }) {
+export async function insertLoginToken({
+  tokenHash,
+  email,
+  expiresAt,
+  profile = null,
+  inviteCode = null,
+  refCode = null,
+}) {
   await sql`
-    insert into login_tokens (token_hash, email, expires_at, profile)
-    values (${tokenHash}, ${email}, ${expiresAt}, ${profile ? JSON.stringify(profile) : null}::text::jsonb)
+    insert into login_tokens (token_hash, email, expires_at, profile, invite_code, ref_code)
+    values (${tokenHash}, ${email}, ${expiresAt}, ${profile ? JSON.stringify(profile) : null}::text::jsonb,
+            ${inviteCode}, ${refCode})
   `;
 }
 
@@ -54,13 +62,17 @@ export async function takeSignupProfile(tokenHash) {
   return typeof row.profile === 'string' ? JSON.parse(row.profile) : row.profile;
 }
 
+/**
+ * Spend a link. Returns what it carried (the address, and any invite or ?ref= code
+ * picked up before the account existed), or null when it is spent or expired.
+ */
 export async function consumeLoginToken(tokenHash) {
   const [row] = await sql`
     update login_tokens set consumed_at = now()
     where token_hash = ${tokenHash} and consumed_at is null and expires_at > now()
-    returning email
+    returning email::text as email, invite_code, ref_code
   `;
-  return row?.email ?? null;
+  return row ?? null;
 }
 
 export async function startSession({ userId, ttlDays, userAgent }) {
@@ -168,6 +180,47 @@ export async function grantCredits(tx, { userId, credits, paymentId, reason = 't
   `;
   // No row means this payment had already been granted. That is a success, not a fault.
   return { granted: Boolean(row), creditLedgerId: row?.id ?? null };
+}
+
+/**
+ * Grant credits that did not come from a payment: a credit code, an invite bonus.
+ *
+ * Keyed on (user, source), so the same code or invite pays an account once however
+ * often this runs. `granted: false` means it had already been paid, not a fault.
+ */
+export async function grantFromSource({ userId, credits, source, reason }, tx = sql) {
+  if (!userId || !Number.isInteger(credits) || credits <= 0 || !source) {
+    throw new Error('bad grant');
+  }
+  const [row] = await tx`
+    insert into credit_ledger ${tx({ user_id: userId, delta: credits, reason, source })}
+    on conflict (user_id, source) where source is not null do nothing
+    returning id
+  `;
+  return { granted: Boolean(row), creditLedgerId: row?.id ?? null };
+}
+
+/**
+ * Mirror this account's redeemed credit codes into credit_ledger.
+ *
+ * @profullstack/redeem-credits records each redemption in its own redeem_ledger. That
+ * row is the proof the code was spent; the credits are spendable only once they are in
+ * credit_ledger. One idempotent statement copies any grant that is missing, so a crash
+ * between the two writes heals on the next redeem attempt or reconcile.
+ */
+export async function reconcileCodeGrants(userId, { unit = 'credits' } = {}) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(userId))) return 0;
+  const rows = await sql`
+    insert into credit_ledger (user_id, delta, reason, source)
+    select r.user_id::uuid, round(r.amount)::int, 'credit code', r.source
+    from redeem_ledger r
+    join users u on u.id = r.user_id::uuid
+    where r.user_id = ${String(userId)} and r.kind = 'grant' and r.unit = ${unit}
+      and r.source like 'code:%' and round(r.amount) > 0
+    on conflict (user_id, source) where source is not null do nothing
+    returning id
+  `;
+  return rows.length;
 }
 
 /**
