@@ -4,7 +4,7 @@
 # rembg caps at >=3.11 and the base image ships Python 3.13, so 2.0.85 is the floor
 # here rather than a preference: every 2.0.x below 2.0.62 declares Requires-Python
 # <3.13 and pip refuses it outright.
-rembg[cpu]==2.0.85
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-python-multipart==0.0.20
+rembg[cpu]==2.0.86
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
