@@ -1,7 +1,7 @@
 # One image, one Railway service: the Bun web app and the Python model in the same
 # container, talking over loopback. Splitting the model onto a GPU box later is an
 # INFER_URL change rather than a rebuild.
-FROM oven/bun:1.3.14-slim AS base
+FROM oven/bun:1.4.4-slim AS base
 WORKDIR /app
 
 # ---------------------------------------------------------------- JS deps --
