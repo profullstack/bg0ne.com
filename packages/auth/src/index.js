@@ -58,7 +58,10 @@ const hashToken = (t) => createHash('sha256').update(t).digest();
  * different response for a registered address turns this into a way to enumerate
  * who has an account.
  */
-export async function createLoginLink(email, { profile = null } = {}) {
+export async function createLoginLink(
+  email,
+  { profile = null, inviteCode = null, refCode = null } = {},
+) {
   const token = randomBytes(32).toString('base64url');
   await q.insertLoginToken({
     tokenHash: hashToken(token),
@@ -66,6 +69,10 @@ export async function createLoginLink(email, { profile = null } = {}) {
     expiresAt: new Date(Date.now() + TOKEN_TTL_MINUTES * 60_000),
     // Signup form fields, already validated by the caller; saved on verify.
     profile,
+    // An invite or affiliate code seen before the account exists. It rides the link so
+    // it still counts when the mail is opened in another browser.
+    inviteCode,
+    refCode,
   });
   return `${config.siteUrl}/auth/magic?t=${token}`;
 }
@@ -78,16 +85,25 @@ export async function createLoginLink(email, { profile = null } = {}) {
  */
 export async function consumeLoginLink(token, { userAgent } = {}) {
   const tokenHash = hashToken(token);
-  const email = await q.consumeLoginToken(tokenHash);
-  if (!email) return null;
+  const spent = await q.consumeLoginToken(tokenHash);
+  if (!spent) return null;
   const profile = await q.takeSignupProfile(tokenHash);
-  const user = await q.findOrCreateUser(email);
+  const user = await q.findOrCreateUser(spent.email);
   const sessionId = await q.startSession({
     userId: user.id,
     ttlDays: config.session.ttlDays,
     userAgent,
   });
-  return { user, sessionId, profile };
+  // `created`: this link made the account, so the address is new and now confirmed.
+  // Only then may an invite or a ?ref= code count.
+  return {
+    user,
+    sessionId,
+    profile,
+    created: Boolean(user.created),
+    inviteCode: spent.invite_code ?? null,
+    refCode: spent.ref_code ?? null,
+  };
 }
 
 /* ----------------------------------------------------------------- passkey -- */
@@ -202,7 +218,9 @@ export async function createApiKey({ userId, name = 'default' }) {
 
 export async function userFromApiKey(header) {
   if (!header) return null;
-  const token = String(header).replace(/^Bearer\s+/i, '').trim();
+  const token = String(header)
+    .replace(/^Bearer\s+/i, '')
+    .trim();
   if (!token.startsWith(API_PREFIX)) return null;
   return q.userForApiKey(createHash('sha256').update(token).digest());
 }

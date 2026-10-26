@@ -14,8 +14,21 @@ import {
 import { createGateway } from '@profullstack/x402-gateway';
 import { x402Gateway } from '@profullstack/x402-gateway/hono';
 import { Hono } from 'hono';
-import { getCookie } from 'hono/cookie';
+import { getCookie, setCookie } from 'hono/cookie';
 import { throttle } from '@profullstack/throttle/hono';
+import {
+  acceptInvite,
+  attributeRef,
+  canonicalInvite,
+  cleanRef,
+  createInvite,
+  INVITE_COOKIE,
+  inviteBonusCredits,
+  inviteSummary,
+  originFor,
+  REF_COOKIE,
+  redeemCode,
+} from './lib/credits.js';
 import { OPEN_PATHS, UNMETERED_PATHS } from './lib/open-paths.js';
 import { decideTier } from './lib/tier.js';
 import {
@@ -23,6 +36,7 @@ import {
   Docs,
   Gone,
   History,
+  Invites,
   Keys,
   Landing,
   NotFound,
@@ -130,6 +144,34 @@ app.use(
 
 const html = (c, body, status = 200) => c.html(body, status);
 
+/** 30 days, the life of an invite: long enough to read the mail and come back. */
+const CODE_COOKIE_SECONDS = 30 * 86_400;
+const codeCookie = (c, name, value) =>
+  setCookie(c, name, value, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: config.isProd,
+    maxAge: CODE_COOKIE_SECONDS,
+  });
+
+/*
+ * ?ref=<affiliate code> on any page: first touch wins, so a cookie already set is kept.
+ * The cookie is @profullstack/referrals' `referral_code`, so one sign-up can never be
+ * counted under two names. It is read when the emailed link is requested and recorded
+ * only if that link creates the account.
+ */
+app.use('*', async (c, next) => {
+  if (c.req.method === 'GET') {
+    const ref = cleanRef(c.req.query('ref'));
+    if (ref && !getCookie(c, REF_COOKIE)) codeCookie(c, REF_COOKIE, ref);
+  }
+  await next();
+});
+
+/** Links are built from SITE_URL, or from the request host if SITE_URL is localhost. */
+const origin = (c) => originFor(config.siteUrl, c.req.url);
+
 app.get('/healthz', (c) => c.text('ok'));
 
 /** OpenWebring descriptor: bg0ne's membership in the Profullstack ring (the footer's links). */
@@ -168,8 +210,104 @@ app.get('/account', async (c) => {
       contact: contact ?? { email: user.email },
       contactError: c.req.query('contact_error') ?? null,
       contactSaved: c.req.query('contact') === 'saved',
+      redeemError: c.req.query('redeem_error') ?? null,
+      redeemed: Number(c.req.query('redeemed')) || 0,
+      invited: Number(c.req.query('invited')) || 0,
     }),
   );
+});
+
+/* ------------------------------------------------- credit codes + invites -- */
+
+/** "Have a code?" on the account page: a plain form, so it works without script. */
+app.post('/account/redeem', async (c) => {
+  const { user, via } = await caller(c);
+  if (!user || via !== 'session') return c.redirect('/signin');
+  const form = await c.req.parseBody();
+  const r = await redeemCode(user.id, String(form.code ?? ''));
+  return c.redirect(
+    r.ok
+      ? `/account?redeemed=${r.credits}#code`
+      : `/account?redeem_error=${encodeURIComponent(r.message)}#code`,
+  );
+});
+
+/** The same for anything holding an API key. */
+app.post('/api/v1/credits/redeem', async (c) => {
+  const { user } = await caller(c);
+  if (!user) return c.json({ error: 'sign in or send an API key' }, 401);
+  const type = c.req.header('content-type') ?? '';
+  const body = type.includes('json')
+    ? await c.req.json().catch(() => ({}))
+    : await c.req.parseBody().catch(() => ({}));
+  const r = await redeemCode(user.id, String(body?.code ?? ''));
+  if (!r.ok)
+    return c.json({ error: r.message, reason: r.reason }, r.reason === 'invalid' ? 404 : 409);
+  return c.json({ ok: true, added_credits: r.credits, credits: r.balance });
+});
+
+app.get('/invites', async (c) => {
+  const { user, via } = await caller(c);
+  if (!user || via !== 'session') return c.redirect('/signin');
+  return html(c, Invites({ user, config, summary: await inviteSummary(user.id, origin(c)) }));
+});
+
+app.post('/invites', async (c) => {
+  const { user, via } = await caller(c);
+  if (!user || via !== 'session') return c.redirect('/signin');
+  const form = await c.req.parseBody();
+  const made = await createInvite(user.id, form.note, origin(c));
+  const summary = await inviteSummary(user.id, origin(c));
+  return html(
+    c,
+    Invites({
+      user,
+      config,
+      summary,
+      created: made.ok ? made : null,
+      error: made.ok ? null : 'You have used all your invites.',
+    }),
+    made.ok ? 200 : 409,
+  );
+});
+
+app.get('/api/v1/invites', async (c) => {
+  const { user } = await caller(c);
+  if (!user) return c.json({ error: 'sign in or send an API key' }, 401);
+  return c.json(await inviteSummary(user.id, origin(c)));
+});
+
+app.post('/api/v1/invites', async (c) => {
+  const { user } = await caller(c);
+  if (!user) return c.json({ error: 'sign in or send an API key' }, 401);
+  const body = await c.req.json().catch(() => ({}));
+  const made = await createInvite(user.id, body?.note, origin(c));
+  if (!made.ok) return c.json({ error: 'no invites left', reason: made.reason }, 409);
+  return c.json(
+    { code: made.code, url: made.url, invite: made.invite, quota: made.quota, shown_once: true },
+    201,
+  );
+});
+
+/**
+ * An invite link. Visiting it spends nothing: the code waits in a cookie (and rides the
+ * emailed link) until an account is actually made. Never metered or sold (open-paths.js),
+ * so a link preview or a friend on a shared IP never meets a 402.
+ */
+app.get('/i/:code', async (c) => {
+  const code = canonicalInvite(c.req.param('code'));
+  const { user } = await caller(c);
+  c.header('x-robots-tag', 'noindex, nofollow');
+  if (!code) {
+    return html(
+      c,
+      SignIn({ mode: 'signup', error: 'That invite link is not valid. You can still sign up.' }),
+      404,
+    );
+  }
+  if (user) return c.redirect('/invites');
+  codeCookie(c, INVITE_COOKIE, code);
+  return html(c, SignIn({ mode: 'signup', invite: code, bonus: inviteBonusCredits() }));
 });
 
 /*
@@ -236,7 +374,17 @@ app.post('/auth/link', async (c) => {
   if (form.mode === 'signup') {
     const check = validateProfile(form);
     if (!check.ok) {
-      return html(c, SignIn({ mode: 'signup', values: form, errors: check.errors }), 400);
+      return html(
+        c,
+        SignIn({
+          mode: 'signup',
+          values: form,
+          errors: check.errors,
+          invite: canonicalInvite(form.invite),
+          bonus: inviteBonusCredits(),
+        }),
+        400,
+      );
     }
     profile = check.profile;
   }
@@ -252,7 +400,11 @@ app.post('/auth/link', async (c) => {
    */
   if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     try {
-      const url = await auth.createLoginLink(email, { profile });
+      const url = await auth.createLoginLink(email, {
+        profile,
+        inviteCode: canonicalInvite(form.invite) ?? canonicalInvite(getCookie(c, INVITE_COOKIE)),
+        refCode: cleanRef(getCookie(c, REF_COOKIE)),
+      });
       if (config.mail.enabled) await sendLoginLink({ email, url });
       else console.log(`[auth] mail disabled; link for ${email}: ${url}`);
     } catch (err) {
@@ -276,8 +428,27 @@ app.get('/auth/magic', async (c) => {
       email: session.user.email,
     }).catch((err) => console.error(`[auth] signup profile save failed: ${err?.message ?? err}`));
   }
+  /*
+   * An invite or ?ref= code counts only when this link made the account: the address is
+   * new and the click just proved it. Signing in to an existing account through an
+   * invite spends nothing. A failure here must not cost anybody their sign-in.
+   */
+  let invited = 0;
+  if (session.created && session.inviteCode) {
+    const out = await acceptInvite(session.inviteCode, session.user).catch((err) => {
+      console.error(`[invite] accept failed: ${err?.message ?? err}`);
+      return null;
+    });
+    invited = out?.credits ?? 0;
+  }
+  if (session.created && session.refCode) {
+    await attributeRef(session.refCode, session.user.id).catch((err) =>
+      console.error(`[ref] attribution failed: ${err?.message ?? err}`),
+    );
+  }
   c.header('set-cookie', auth.sessionCookie(session.sessionId));
-  return c.redirect('/account');
+  if (getCookie(c, INVITE_COOKIE)) setCookie(c, INVITE_COOKIE, '', { path: '/', maxAge: 0 });
+  return c.redirect(invited ? `/account?invited=${invited}` : '/account');
 });
 
 app.post('/auth/signout', async (c) => {

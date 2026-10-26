@@ -8,14 +8,16 @@
     "start": "bun src/main.js"
   },
   "dependencies": {
-    "@profullstack/footer": "latest",
     "@bg0ne/auth": "workspace:*",
     "@bg0ne/config": "workspace:*",
     "@bg0ne/cutout": "workspace:*",
     "@bg0ne/db": "workspace:*",
     "@bg0ne/notify": "workspace:*",
     "@bg0ne/payments": "workspace:*",
+    "@profullstack/affiliates": "^0.3.0",
+    "@profullstack/footer": "latest",
     "@profullstack/profile": "0.1.6",
+    "@profullstack/redeem-credits": "^0.2.0",
     "@profullstack/throttle": "^0.3.4",
     "@profullstack/x402-gateway": "^0.13.1",
     "hono": "^4.13.14"

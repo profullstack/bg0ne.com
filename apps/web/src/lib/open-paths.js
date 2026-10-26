@@ -33,4 +33,11 @@ export const UNMETERED_PATHS = [
   '/robots.txt',
   '/sitemap.xml',
   '/.well-known/openwebring.json',
+  // CoinPay's callbacks share its egress IPs with every other merchant, and they are a
+  // server, not a browser: a 429 or a crawl-pass 402 here would leave a paid top-up
+  // uncredited. The signature is the gate (same fix as typeheard 57e5cda).
+  '/webhooks/',
+  // Invite links (/i/<code>): a chat app's link preview, or a friend on a shared IP,
+  // must never meet a 402 or a limit before they have even seen the page.
+  '/i/',
 ];

@@ -50,6 +50,14 @@ test('documentation subpaths are open, so future pages do not need a deploy to f
   expect(matchesAny(OPEN_PATHS, '/pricing/enterprise')).toBe(true);
 });
 
+test('payment callbacks and invite links are never rate limited or sold', () => {
+  for (const path of ['/webhooks/coinpay', '/i/INV-AAAA-BBBB-CCCC']) {
+    expect(matchesAny(UNMETERED_PATHS, path)).toBe(true);
+    // Still not OPEN: open means "readable by a refused caller", a different list.
+    expect(matchesAny(OPEN_PATHS, path)).toBe(false);
+  }
+});
+
 test('liveness and crawler boilerplate are never metered', () => {
   for (const path of ['/healthz', '/robots.txt', '/sitemap.xml']) {
     expect(matchesAny(UNMETERED_PATHS, path)).toBe(true);
