@@ -58,12 +58,14 @@ const hashToken = (t) => createHash('sha256').update(t).digest();
  * different response for a registered address turns this into a way to enumerate
  * who has an account.
  */
-export async function createLoginLink(email) {
+export async function createLoginLink(email, { profile = null } = {}) {
   const token = randomBytes(32).toString('base64url');
   await q.insertLoginToken({
     tokenHash: hashToken(token),
     email: email.trim().toLowerCase(),
     expiresAt: new Date(Date.now() + TOKEN_TTL_MINUTES * 60_000),
+    // Signup form fields, already validated by the caller; saved on verify.
+    profile,
   });
   return `${config.siteUrl}/auth/magic?t=${token}`;
 }
@@ -75,15 +77,17 @@ export async function createLoginLink(email) {
  * account rather than being turned away to find a sign-up form.
  */
 export async function consumeLoginLink(token, { userAgent } = {}) {
-  const email = await q.consumeLoginToken(hashToken(token));
+  const tokenHash = hashToken(token);
+  const email = await q.consumeLoginToken(tokenHash);
   if (!email) return null;
+  const profile = await q.takeSignupProfile(tokenHash);
   const user = await q.findOrCreateUser(email);
   const sessionId = await q.startSession({
     userId: user.id,
     ttlDays: config.session.ttlDays,
     userAgent,
   });
-  return { user, sessionId };
+  return { user, sessionId, profile };
 }
 
 /* ----------------------------------------------------------------- passkey -- */
