@@ -22,6 +22,6 @@
   "packageManager": "bun@1.4.4",
   "devDependencies": {
     "@biomejs/biome": "^2.6.3",
-    "@profullstack/throttle": "^0.3.4"
+    "@profullstack/throttle": "^0.4.0"
   }
 }
