@@ -1,9 +1,9 @@
 import * as auth from '@bg0ne/auth';
 import { config } from '@bg0ne/config';
+import { CutoutError, cutout } from '@bg0ne/cutout';
 import { sql } from '@bg0ne/db';
 import * as q from '@bg0ne/db/queries';
 import { sendLoginLink, sendTopupReceipt } from '@bg0ne/notify';
-import { cutout, CutoutError } from '@bg0ne/cutout';
 import * as pay from '@bg0ne/payments';
 import {
   createProfileStore,
@@ -11,11 +11,11 @@ import {
   saveSignupProfile,
   validateProfile,
 } from '@profullstack/profile';
+import { throttle } from '@profullstack/throttle/hono';
 import { createGateway } from '@profullstack/x402-gateway';
 import { x402Gateway } from '@profullstack/x402-gateway/hono';
 import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
-import { throttle } from '@profullstack/throttle/hono';
 import {
   acceptInvite,
   attributeRef,
@@ -64,7 +64,9 @@ async function caller(c) {
     if (user) return { user, apiKeyId: user.api_key_id, via: 'api-key' };
   }
   const user = await auth.userFromRequest(getCookie(c, config.session.cookie));
-  return user ? { user, apiKeyId: null, via: 'session' } : { user: null, apiKeyId: null, via: null };
+  return user
+    ? { user, apiKeyId: null, via: 'session' }
+    : { user: null, apiKeyId: null, via: null };
 }
 
 /* -------------------------------------------------------------------- x402 -- */
@@ -195,10 +197,12 @@ app.get('/signup', (c) => html(c, SignIn({ mode: 'signup' })));
 app.get('/account', async (c) => {
   const { user } = await caller(c);
   if (!user) return c.redirect('/signin');
-  const [balance, ledger, contact] = await Promise.all([
+  const [balance, ledger, contact, coinpay, canDisconnect] = await Promise.all([
     q.creditBalance(user.id),
     q.creditHistory(user.id),
     profiles.get(user.id),
+    q.coinpayIdentityForUser(user.id),
+    auth.canDisconnectCoinpay(user),
   ]);
   return html(
     c,
@@ -207,7 +211,13 @@ app.get('/account', async (c) => {
       balance,
       ledger,
       config,
-      contact: contact ?? { email: user.email },
+      contact: contact ?? { email: contactEmail(user, coinpay) },
+      coinpay: {
+        enabled: auth.coinpayEnabled(),
+        identity: coinpay,
+        canDisconnect,
+        status: c.req.query('coinpay') ?? null,
+      },
       contactError: c.req.query('contact_error') ?? null,
       contactSaved: c.req.query('contact') === 'saved',
       redeemError: c.req.query('redeem_error') ?? null,
@@ -325,11 +335,23 @@ mountProfileRoutes(app, {
   },
 });
 
+/**
+ * The address the contact details are sent with: the account's own, or for a
+ * CoinPay-only account (placeholder users.email) the unverified address CoinPay
+ * reported, as contact information only.
+ */
+function contactEmail(user, coinpay) {
+  return auth.isPlaceholderEmail(user.email) && coinpay?.email ? coinpay.email : user.email;
+}
+
 app.post('/account/contact', async (c) => {
   const { user } = await caller(c);
   if (!user) return c.redirect('/signin');
   const form = await c.req.parseBody();
-  const check = validateProfile({ ...form, email: user.email });
+  const coinpay = auth.isPlaceholderEmail(user.email)
+    ? await q.coinpayIdentityForUser(user.id)
+    : null;
+  const check = validateProfile({ ...form, email: contactEmail(user, coinpay) });
   if (!check.ok) {
     const first = Object.values(check.errors)[0];
     return c.redirect(`/account?contact_error=${encodeURIComponent(first)}#contact`);
@@ -398,7 +420,8 @@ app.post('/auth/link', async (c) => {
    * "does this person have an account here", and a rate limit reported as a failure
    * does the same thing more slowly. Both are answered as success.
    */
-  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+  // A .invalid address can never receive the link (CoinPay-only accounts use one).
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) && !auth.isPlaceholderEmail(email)) {
     try {
       const url = await auth.createLoginLink(email, {
         profile,
@@ -419,7 +442,8 @@ app.get('/auth/magic', async (c) => {
   const session = token
     ? await auth.consumeLoginLink(token, { userAgent: c.req.header('user-agent') })
     : null;
-  if (!session) return html(c, SignIn({ error: 'That link has expired or was already used.' }), 400);
+  if (!session)
+    return html(c, SignIn({ error: 'That link has expired or was already used.' }), 400);
   // The fields typed on the signup form, saved now that the account exists and the
   // link has proved the mailbox. A failure here must not cost anybody their sign-in:
   // the account page asks again.
@@ -449,6 +473,99 @@ app.get('/auth/magic', async (c) => {
   c.header('set-cookie', auth.sessionCookie(session.sessionId));
   if (getCookie(c, INVITE_COOKIE)) setCookie(c, INVITE_COOKIE, '', { path: '/', maxAge: 0 });
   return c.redirect(invited ? `/account?invited=${invited}` : '/account');
+});
+
+/* ------------------------------------------------------- sign in with CoinPay -- */
+
+const COINPAY_COOKIE_PATH = '/api/v1/coinpay/oauth';
+const COINPAY_ERRORS = {
+  bad_state: 'That CoinPay sign-in expired or did not start here. Try again.',
+  not_signed_in: 'Sign in to bg0ne first, then connect CoinPay from your account page.',
+  sub_taken: 'That CoinPay account is already connected to a different bg0ne account.',
+  already_linked: 'A different CoinPay account is already connected. Disconnect it first.',
+  access_denied: 'CoinPay sign-in was cancelled.',
+};
+
+/**
+ * Start "Sign in with CoinPay" (or, with ?mode=link and a session, "Connect CoinPay").
+ * The state rides an httpOnly cookie scoped to the callback; verifier and nonce stay in
+ * the database.
+ */
+app.get('/api/v1/coinpay/oauth/start', async (c) => {
+  if (!auth.coinpayEnabled()) {
+    return html(c, SignIn({ error: 'Sign in with CoinPay is not available right now.' }), 503);
+  }
+  const mode = c.req.query('mode') === 'link' ? 'link' : 'signin';
+  let userId = null;
+  if (mode === 'link') {
+    const { user, via } = await caller(c);
+    if (!user || via !== 'session') return c.redirect('/signin');
+    userId = user.id;
+  }
+  const { url, state } = await auth.startCoinpay({
+    mode,
+    userId,
+    refCode: cleanRef(getCookie(c, REF_COOKIE)),
+  });
+  setCookie(c, auth.COINPAY_STATE_COOKIE, state, {
+    path: COINPAY_COOKIE_PATH,
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: config.isProd,
+    maxAge: 600,
+  });
+  c.header('cache-control', 'no-store');
+  return c.redirect(url, 302);
+});
+
+app.get('/api/v1/coinpay/oauth/callback', async (c) => {
+  const cookieState = getCookie(c, auth.COINPAY_STATE_COOKIE);
+  setCookie(c, auth.COINPAY_STATE_COOKIE, '', { path: COINPAY_COOKIE_PATH, maxAge: 0 });
+  c.header('cache-control', 'no-store');
+  const fail = (code, status = 400) =>
+    html(
+      c,
+      SignIn({ error: COINPAY_ERRORS[code] ?? 'CoinPay sign-in failed. Try again.' }),
+      status,
+    );
+
+  if (c.req.query('error')) {
+    return fail(c.req.query('error') === 'access_denied' ? 'access_denied' : 'failed');
+  }
+  const { user: sessionUser, via } = await caller(c);
+  let out;
+  try {
+    out = await auth.finishCoinpay({
+      state: c.req.query('state'),
+      code: c.req.query('code'),
+      cookieState,
+      sessionUser: via === 'session' ? sessionUser : null,
+      userAgent: c.req.header('user-agent'),
+    });
+  } catch (err) {
+    console.error(`[coinpay] sign-in refused: ${err?.code ?? 'error'}: ${err?.message ?? err}`);
+    return fail(err?.code ?? 'failed');
+  }
+  if (out.mode === 'link') return c.redirect('/account?coinpay=linked#coinpay');
+
+  // A ?ref= code counts only when this sign-in made the account.
+  if (out.created && out.refCode) {
+    await attributeRef(out.refCode, out.user.id).catch((err) =>
+      console.error(`[ref] attribution failed: ${err?.message ?? err}`),
+    );
+  }
+  c.header('set-cookie', auth.sessionCookie(out.sessionId), { append: true });
+  return c.redirect('/account');
+});
+
+app.post('/account/coinpay/disconnect', async (c) => {
+  const { user, via } = await caller(c);
+  if (!user || via !== 'session') return c.redirect('/signin');
+  if (!(await auth.canDisconnectCoinpay(user))) {
+    return c.redirect('/account?coinpay=only_way_in#coinpay');
+  }
+  await q.unlinkCoinpayIdentity(user.id);
+  return c.redirect('/account?coinpay=disconnected#coinpay');
 });
 
 app.post('/auth/signout', async (c) => {
@@ -613,7 +730,9 @@ app.post('/api/cutout', async (c) => {
         .catch((refundErr) =>
           // Loud: the customer has been charged for work that did not happen and the
           // automatic repair just failed too. This one needs a human.
-          console.error(`[cutout] REFUND FAILED for ${user.id}: ${refundErr?.message ?? refundErr}`),
+          console.error(
+            `[cutout] REFUND FAILED for ${user.id}: ${refundErr?.message ?? refundErr}`,
+          ),
         );
     }
     const status = err instanceof CutoutError ? err.status : 500;
@@ -715,7 +834,7 @@ app.post('/webhooks/coinpay', async (c) => {
     // (nested) webhook, so no receipt was ever sent.
     const { userId, ...details } = receipt;
     const email = await q.userEmail(userId);
-    if (email && config.mail.enabled) {
+    if (email && !auth.isPlaceholderEmail(email) && config.mail.enabled) {
       sendTopupReceipt({ email, ...details }).catch((err) =>
         console.error(`[mail] receipt not sent: ${err?.message ?? err}`),
       );

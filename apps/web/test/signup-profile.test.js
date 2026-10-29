@@ -33,8 +33,11 @@ test('signup asks for the profile fields, sign-in does not', async () => {
     expect(signup).toContain(`name="${name}"`);
   }
   expect(signup).toContain('name="mode" value="signup"');
-  // One email box, the form's own.
-  expect(signup.match(/<input[^>]*name="email"/g)?.length).toBe(1);
+  // One email box in the sign-up form (the footer's newsletter box is its own form).
+  const authForm = signup.slice(signup.indexOf('action="/auth/link"'));
+  expect(
+    authForm.slice(0, authForm.indexOf('</form>')).match(/<input[^>]*name="email"/g)?.length,
+  ).toBe(1);
 
   const signin = await (await app.request('/signin')).text();
   expect(signin).not.toContain('name="first_name"');

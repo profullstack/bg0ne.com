@@ -177,6 +177,30 @@ export const config = {
   },
 
   /**
+   * Sign in with CoinPay: a confidential OAuth client (auth code + PKCE S256 + state +
+   * nonce). Getters, like `coinpay` above, so tests can set the variables after import.
+   * Off until both halves of the client are present.
+   */
+  coinpayOauth: {
+    get clientId() {
+      return process.env.COINPAY_OAUTH_CLIENT_ID ?? '';
+    },
+    get clientSecret() {
+      return process.env.COINPAY_OAUTH_CLIENT_SECRET ?? '';
+    },
+    get enabled() {
+      return Boolean(this.clientId && this.clientSecret);
+    },
+    /** The authorization server, which is also the id_token issuer. */
+    get base() {
+      return (process.env.COINPAY_OAUTH_ISSUER ?? 'https://coinpayportal.com').replace(/\/$/, '');
+    },
+    get redirectUri() {
+      return `${(process.env.SITE_URL ?? 'http://localhost:3000').replace(/\/$/, '')}/api/v1/coinpay/oauth/callback`;
+    },
+  },
+
+  /**
    * Agent-native metering. A bot pays per call and never makes an account.
    *
    * This is the thing remove.bg structurally cannot offer: no signup, no key, no

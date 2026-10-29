@@ -489,3 +489,104 @@ export async function paymentByRef(ref) {
   `;
   return row ?? null;
 }
+
+/* ---------------------------------------------------------- sign in with CoinPay -- */
+
+export async function insertCoinpayPending({
+  state,
+  verifier,
+  nonce,
+  mode,
+  userId = null,
+  refCode = null,
+  ttlMinutes = 10,
+}) {
+  // Old rows go on the way in: nothing else ever reads an abandoned request.
+  await sql`delete from coinpay_oauth_pending where expires_at < now()`;
+  await sql`
+    insert into coinpay_oauth_pending ${sql({
+      state,
+      verifier,
+      nonce,
+      mode,
+      user_id: userId,
+      ref_code: refCode,
+      expires_at: new Date(Date.now() + ttlMinutes * 60_000),
+    })}
+  `;
+}
+
+/** Spend a pending request. Single use: a replayed callback finds nothing. */
+export async function takeCoinpayPending(state) {
+  const [row] = await sql`
+    delete from coinpay_oauth_pending
+    where state = ${String(state)} and expires_at > now()
+    returning *
+  `;
+  return row ?? null;
+}
+
+export async function coinpayIdentityBySub(sub) {
+  const [row] = await sql`select * from coinpay_identities where sub = ${sub}`;
+  return row ?? null;
+}
+
+export async function coinpayIdentityForUser(userId) {
+  const [row] = await sql`select * from coinpay_identities where user_id = ${userId}`;
+  return row ?? null;
+}
+
+export async function touchCoinpayIdentity(sub, { email = null, name = null } = {}) {
+  await sql`
+    update coinpay_identities
+    set last_login_at = now(), email = coalesce(${email}, email), name = coalesce(${name}, name)
+    where sub = ${sub}
+  `;
+}
+
+/**
+ * A brand-new account for a CoinPay identity nobody has linked yet.
+ *
+ * users.email is unique and required, so the account gets a placeholder under the
+ * reserved .invalid TLD (RFC 2606): it can never receive mail, never collides with a
+ * real address, and nobody can sign in to it by magic link. The CoinPay email is kept
+ * on the identity row as contact information only.
+ */
+export async function createUserForCoinpay({ sub, email = null, name = null, placeholder }) {
+  return sql.begin(async (tx) => {
+    const [user] = await tx`
+      insert into users ${tx({ email: placeholder })}
+      returning *, email::text as email
+    `;
+    await tx`
+      insert into coinpay_identities ${tx({
+        sub,
+        user_id: user.id,
+        email,
+        name,
+        last_login_at: new Date(),
+      })}
+    `;
+    return user;
+  });
+}
+
+/** Attach a CoinPay identity to an account somebody is signed in to. */
+export async function linkCoinpayIdentity({ sub, userId, email = null, name = null }) {
+  const [row] = await sql`
+    insert into coinpay_identities ${sql({ sub, user_id: userId, email, name, last_login_at: new Date() })}
+    on conflict do nothing
+    returning sub
+  `;
+  return Boolean(row);
+}
+
+export async function unlinkCoinpayIdentity(userId) {
+  const rows = await sql`delete from coinpay_identities where user_id = ${userId} returning sub`;
+  return rows.length > 0;
+}
+
+export async function userById(userId) {
+  const [row] = await sql`select *, email::text as email from users where id = ${userId}`;
+  return row ?? null;
+}
