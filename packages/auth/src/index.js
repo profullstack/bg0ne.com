@@ -231,3 +231,4 @@ export function safeEqualHex(a, b) {
   const bb = Buffer.from(b, 'hex');
   return ba.length === bb.length && timingSafeEqual(ba, bb);
 }
+export * from './coinpay.js';

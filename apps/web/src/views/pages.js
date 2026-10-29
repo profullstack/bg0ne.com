@@ -5,6 +5,7 @@
  * a build step for that is a cost with nothing on the other side of it.
  */
 
+import { config as siteConfig } from '@bg0ne/config';
 import {
   COLUMNS as PROFILE_COLUMNS,
   PROFILE_ENHANCE_SCRIPT,
@@ -84,6 +85,9 @@ footer.pfs-footer .pfs-footer__inner{flex-direction:row;flex-wrap:wrap;justify-c
 .pfs-profile__row input{font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--fg);width:100%;margin:8px 0 14px}
 .pfs-profile__optional{font-size:14px}
 .pfs-profile__error{color:#c33;font-size:14px;margin:-8px 0 14px}
+.btn.coinpay{display:flex;justify-content:center;align-items:center;gap:8px;width:100%;max-width:420px;margin:0 0 10px}
+.or{display:flex;align-items:center;gap:12px;max-width:420px;color:var(--mut);font-size:14px;margin:6px 0 16px}
+.or::before,.or::after{content:"";flex:1;border-top:1px solid var(--line)}
 .sharebox input{font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);flex:1;min-width:240px}
 `;
 
@@ -385,6 +389,44 @@ function AccountNav(active) {
     .join('')}</nav>`;
 }
 
+const PLACEHOLDER_SUFFIX = '@coinpay.invalid';
+
+/** What the account is called: its email, or for a CoinPay-only account, that fact. */
+function accountLabel(user, coinpay) {
+  if (!String(user.email).toLowerCase().endsWith(PLACEHOLDER_SUFFIX)) return user.email;
+  const who = coinpay?.identity?.name || coinpay?.identity?.email;
+  return who ? `Signed in with CoinPay (${who})` : 'Signed in with CoinPay';
+}
+
+const COINPAY_STATUS = {
+  linked: 'CoinPay connected. You can sign in with it from now on.',
+  disconnected: 'CoinPay disconnected.',
+  only_way_in:
+    'CoinPay is the only way in to this account, so it cannot be disconnected. Add a passkey first.',
+};
+
+function CoinpaySection({ enabled, identity, canDisconnect, status }) {
+  const note = status && COINPAY_STATUS[status];
+  return `
+<h2 id="coinpay">CoinPay</h2>
+${note ? `<p class="card"${status === 'only_way_in' ? ' style="border-color:#c33"' : ''}>${esc(note)}</p>` : ''}
+<div class="card" style="max-width:420px">
+${
+  identity
+    ? `<p style="margin:0 0 12px">Connected${identity.email ? ` as ${esc(identity.email)}` : ''}. Sign in with CoinPay opens this account.</p>
+  ${
+    canDisconnect
+      ? `<form method="post" action="/account/coinpay/disconnect" style="margin:0"><button class="btn ghost" type="submit">Disconnect CoinPay</button></form>`
+      : '<p class="muted" style="margin:0;font-size:14px">CoinPay is the only way in to this account, so it cannot be disconnected.</p>'
+  }`
+    : enabled
+      ? `<p style="margin:0 0 12px">Connect your CoinPay account to sign in here with it.</p>
+  <a class="btn" href="/api/v1/coinpay/oauth/start?mode=link" rel="nofollow">Connect CoinPay</a>`
+      : '<p class="muted" style="margin:0">Not connected.</p>'
+}
+</div>`;
+}
+
 export function Account({
   user,
   balance,
@@ -396,6 +438,7 @@ export function Account({
   redeemError = null,
   redeemed = 0,
   invited = 0,
+  coinpay = null,
 }) {
   const rows = ledger
     .map(
@@ -409,7 +452,7 @@ export function Account({
     description: 'Your credits and billing history.',
     body: `
 <h1>Account</h1>
-<p class="lede">${esc(user.email)}</p>
+<p class="lede">${esc(accountLabel(user, coinpay))}</p>
 ${AccountNav('/account')}
 ${invited ? `<p class="card">Welcome. Your invite added ${invited.toLocaleString()} credits, and the friend who invited you got the same.</p>` : ''}
 
@@ -436,13 +479,15 @@ ${ledger.length ? `<table><tr><th>Change</th><th>Reason</th><th>When</th></tr>${
 </div>
 
 <h2 id="contact">Contact details</h2>
-<p class="muted">Private to your account. Sent with ${esc(user.email)}.</p>
+<p class="muted">Private to your account. Sent with ${esc(contact?.email ?? user.email)}.</p>
 ${contactError ? `<p class="card" style="border-color:#c33">${esc(contactError)}</p>` : ''}
 ${contactSaved ? '<p class="muted">Contact details saved.</p>' : ''}
 <form method="post" action="/account/contact" class="card" style="max-width:420px">
   ${renderProfileFields({ fields: SIGNUP_FIELDS, values: contact ?? {} })}
   <button class="btn" type="submit">Save contact details</button>
 </form>
+
+${coinpay?.enabled || coinpay?.identity ? CoinpaySection(coinpay) : ''}
 
 <p style="margin-top:32px"><form method="post" action="/auth/signout"><button class="btn ghost">Sign out</button></form></p>`,
   });
@@ -655,6 +700,12 @@ ${invite ? `<p class="card">Someone wanted you on bg0ne.${bonus > 0 ? ` Make you
 <p class="lede">We email you a link. There is no password to choose, forget or leak, and
 the same link makes the account if you do not have one yet.</p>
 ${error ? `<p class="card" style="border-color:#c33">${esc(error)}</p>` : ''}
+${
+  siteConfig.coinpayOauth.enabled
+    ? `<a class="btn coinpay" href="/api/v1/coinpay/oauth/start" rel="nofollow">Sign in with CoinPay</a>
+<div class="or">or with your email</div>`
+    : ''
+}
 <form method="post" action="/auth/link" class="card" style="max-width:420px">
   ${signup ? '<input type="hidden" name="mode" value="signup">' : ''}
   ${invite ? `<input type="hidden" name="invite" value="${esc(invite)}">` : ''}
