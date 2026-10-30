@@ -186,6 +186,24 @@ app.get('/.well-known/openwebring.json', (c) => {
     rings: [{ ring: 'https://rssamplifier.com/ring/profullstack', slug: 'bg0ne-com' }],
   });
 });
+const PWA_FILES = new Map([
+  ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json; charset=utf-8']],
+  ['/sw.js', ['sw.js', 'text/javascript; charset=utf-8']],
+  ['/pwa-register.js', ['pwa-register.js', 'text/javascript; charset=utf-8']],
+  ['/icon-192.png', ['icon-192.png', 'image/png']],
+  ['/icon-512.png', ['icon-512.png', 'image/png']],
+  ['/icon-maskable-512.png', ['icon-maskable-512.png', 'image/png']],
+]);
+for (const [route, [file, type]] of PWA_FILES) {
+  app.get(route, async (c) => {
+    const asset = Bun.file(new URL(`../public/${file}`, import.meta.url));
+    if (!(await asset.exists())) return c.notFound();
+    return c.body(await asset.arrayBuffer(), 200, {
+      'content-type': type,
+      'cache-control': file === 'sw.js' ? 'no-cache' : 'public, max-age=86400',
+    });
+  });
+}
 
 app.get('/', (c) => html(c, Landing({ config })));
 app.get('/pricing', (c) => html(c, Pricing({ config })));

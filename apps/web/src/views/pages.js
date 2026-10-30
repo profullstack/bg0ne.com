@@ -111,6 +111,8 @@ function page({ title, description, body, canonical, ad = false }) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}">
+<meta name="theme-color" content="#5b4bff">
+<link rel="manifest" href="/manifest.webmanifest">
 ${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✂️</text></svg>">
 <style>${STYLE}</style>
@@ -130,6 +132,7 @@ ${ad ? AD_UNIT : ''}
 <main class="wrap">${body}</main>
 ${pfsFooter()}
 ${pitFooter()}
+<script src="/pwa-register.js" defer></script>
 </body></html>`;
 }
 
