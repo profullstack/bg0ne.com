@@ -483,9 +483,10 @@ ${ledger.length ? `<table><tr><th>Change</th><th>Reason</th><th>When</th></tr>${
 ${contactError ? `<p class="card" style="border-color:#c33">${esc(contactError)}</p>` : ''}
 ${contactSaved ? '<p class="muted">Contact details saved.</p>' : ''}
 <form method="post" action="/account/contact" class="card" style="max-width:420px">
-  ${renderProfileFields({ fields: SIGNUP_FIELDS, values: contact ?? {} })}
+  ${renderProfileFields({ fields: SIGNUP_FIELDS, values: contact ?? {}, importOpenProfile: true })}
   <button class="btn" type="submit">Save contact details</button>
 </form>
+<script>${PROFILE_ENHANCE_SCRIPT}</script>
 
 ${coinpay?.enabled || coinpay?.identity ? CoinpaySection(coinpay) : ''}
 

@@ -123,7 +123,14 @@ export async function finishCoinpay({ state, code, cookieState, sessionUser, use
     }
     if (!existing) await q.linkCoinpayIdentity({ sub, userId: sessionUser.id, email, name });
     else await q.touchCoinpayIdentity(sub, { email, name });
-    return { mode: 'link', user: sessionUser, created: false, email, name };
+    return {
+      mode: 'link',
+      user: sessionUser,
+      created: false,
+      email,
+      name,
+      openprofileUrl: typeof result.userinfo?.openprofile_url === 'string' ? result.userinfo.openprofile_url : null,
+    };
   }
 
   // Sign in: by sub, and only by sub.

@@ -8,6 +8,7 @@ import * as pay from '@bg0ne/payments';
 import {
   createProfileStore,
   mountProfileRoutes,
+  saveOpenProfileContact,
   saveSignupProfile,
   validateProfile,
 } from '@profullstack/profile';
@@ -546,7 +547,16 @@ app.get('/api/v1/coinpay/oauth/callback', async (c) => {
     console.error(`[coinpay] sign-in refused: ${err?.code ?? 'error'}: ${err?.message ?? err}`);
     return fail(err?.code ?? 'failed');
   }
-  if (out.mode === 'link') return c.redirect('/account?coinpay=linked#coinpay');
+  if (out.mode === 'link') {
+    if (out.openprofileUrl) {
+      try {
+        await saveOpenProfileContact(profiles, String(out.user.id), out.openprofileUrl);
+      } catch (err) {
+        console.warn('[coinpay] OpenProfile import skipped:', err instanceof Error ? err.message : err);
+      }
+    }
+    return c.redirect('/account?coinpay=linked#coinpay');
+  }
 
   // A ?ref= code counts only when this sign-in made the account.
   if (out.created && out.refCode) {
