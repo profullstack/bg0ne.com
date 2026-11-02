@@ -113,6 +113,9 @@ function page({ title, description, body, canonical, ad = false }) {
 <meta name="description" content="${esc(description)}">
 ${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✂️</text></svg>">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="theme-color" content="#5b4bff">
 <style>${STYLE}</style>
 <script data-site="68d4a3fa-7b29-4939-b0cd-ab3289bad021" src="https://crawlproof.com/stats.js" async></script>
 </head>

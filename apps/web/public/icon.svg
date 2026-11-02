@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#5b4bff"/>
+  <text x="256" y="306" text-anchor="middle" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-weight="700" font-size="160" letter-spacing="-8" fill="#fff">bg<tspan fill="#d6d0ff">0</tspan></text>
+</svg>
