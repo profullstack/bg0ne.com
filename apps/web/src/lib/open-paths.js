@@ -33,6 +33,11 @@ export const UNMETERED_PATHS = [
   '/robots.txt',
   '/sitemap.xml',
   '/.well-known/openwebring.json',
+  // PWA manifest + icons: installers and store inspectors fetch these cold.
+  '/manifest.webmanifest',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon.svg',
   // CoinPay's callbacks share its egress IPs with every other merchant, and they are a
   // server, not a browser: a 429 or a crawl-pass 402 here would leave a paid top-up
   // uncredited. The signature is the gate (same fix as typeheard 57e5cda).

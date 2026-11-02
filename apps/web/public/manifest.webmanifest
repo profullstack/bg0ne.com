@@ -1,0 +1,17 @@
+{
+  "name": "bg0ne: BG, gone",
+  "short_name": "bg0ne",
+  "description": "Free, open-source background remover on open models. Pay per HD cutout.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#5b4bff",
+  "background_color": "#fbfbfd",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

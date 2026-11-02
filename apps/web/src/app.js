@@ -916,6 +916,23 @@ app.post('/c/:id/delete', async (c) => {
 
 /* -------------------------------------------------------------- boilerplate -- */
 
+// PWA: the web app manifest and its icons (apps/web/public), so the site installs
+// and pwamart.com can list it. Unmetered, like robots.txt.
+const PUBLIC_FILES = {
+  '/manifest.webmanifest': 'application/manifest+json',
+  '/icon-192.png': 'image/png',
+  '/icon-512.png': 'image/png',
+  '/icon.svg': 'image/svg+xml',
+};
+for (const [path, type] of Object.entries(PUBLIC_FILES)) {
+  const file = new URL(`../public${path}`, import.meta.url);
+  app.get(path, async (c) => {
+    c.header('content-type', type);
+    c.header('cache-control', 'public, max-age=86400');
+    return c.body(await Bun.file(file).arrayBuffer());
+  });
+}
+
 app.get('/robots.txt', (c) =>
   c.text(
     ['User-agent: *', 'Allow: /', '', `Sitemap: ${config.siteUrl}/sitemap.xml`, ''].join('\n'),
