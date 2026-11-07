@@ -107,6 +107,8 @@ export async function finishCoinpay({ state, code, cookieState, sessionUser, use
     throw new CoinpayError('exchange_failed', String(err?.message ?? err));
   }
   const { sub, email, name } = result;
+  // Profullstack Pass, parsed by coinpay-onboard (active only with a future expiry).
+  const pass = result.pass ?? null;
 
   if (pending.mode === 'link') {
     // Only the account that started the link may finish it.
@@ -129,6 +131,8 @@ export async function finishCoinpay({ state, code, cookieState, sessionUser, use
       created: false,
       email,
       name,
+      sub,
+      pass,
       openprofileUrl: typeof result.userinfo?.openprofile_url === 'string' ? result.userinfo.openprofile_url : null,
     };
   }
@@ -158,6 +162,8 @@ export async function finishCoinpay({ state, code, cookieState, sessionUser, use
     refCode: pending.ref_code ?? null,
     email,
     name,
+    sub,
+    pass,
   };
 }
 
