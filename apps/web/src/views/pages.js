@@ -283,6 +283,7 @@ nothing to cancel, and previews stay free whether you have credits or not.</p>
 <div class="card">
 <p class="muted" style="margin:0 0 14px">Pay with any major coin or PayPal. You pick on the
 CoinPay checkout page.</p>
+<p class="muted" style="margin:0 0 14px">Deposit $99 in your CoinPay wallet and get a free month: <a href="https://coinpayportal.com/pass">CoinPay Pass</a> (200 free credits when you sign in with CoinPay).</p>
 <table>
 <tr><th>Top up</th><th>Credits</th><th>Per image</th><th></th></tr>
 ${rows}

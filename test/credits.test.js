@@ -166,3 +166,32 @@ test('a magic link works once', async () => {
   // Replaying a consumed link must not mint a second session.
   expect(await auth.consumeLoginLink(token)).toBeNull();
 });
+
+/* ------------------------------------------------------- Profullstack Pass -- */
+
+test('an active Profullstack Pass grants the smallest top-up in credits, once per pass', async () => {
+  const { grantCoinpayPass, passGrant, passCredits } = await import('../apps/web/src/lib/pass.js');
+  expect(passCredits()).toBe(200);
+  const exp = new Date(Date.now() + 20 * 86_400_000);
+  const pass = { active: true, expiresAt: exp };
+  expect(passGrant({ sub: 's', pass }).source).toBe(`coinpay-pass:s:${exp.toISOString()}`);
+  expect((await grantCoinpayPass(q, { userId: user.id, sub: 's', pass })).granted).toBe(true);
+  expect((await grantCoinpayPass(q, { userId: user.id, sub: 's', pass })).granted).toBe(false);
+  expect(await q.creditBalance(user.id)).toBe(200);
+  const next = { active: true, expiresAt: new Date(exp.getTime() + 30 * 86_400_000) };
+  expect((await grantCoinpayPass(q, { userId: user.id, sub: 's', pass: next })).granted).toBe(true);
+  expect(await q.creditBalance(user.id)).toBe(400);
+});
+
+test('no pass, an inactive pass or an expired pass grants nothing', async () => {
+  const { grantCoinpayPass } = await import('../apps/web/src/lib/pass.js');
+  for (const pass of [
+    null,
+    { active: false, expiresAt: null },
+    { active: true, expiresAt: new Date(Date.now() - 1000) },
+    { active: true, expiresAt: null },
+  ]) {
+    expect(await grantCoinpayPass(q, { userId: user.id, sub: 's', pass })).toBeNull();
+  }
+  expect(await q.creditBalance(user.id)).toBe(0);
+});

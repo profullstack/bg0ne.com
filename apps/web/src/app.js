@@ -31,6 +31,7 @@ import {
   redeemCode,
 } from './lib/credits.js';
 import { OPEN_PATHS, UNMETERED_PATHS } from './lib/open-paths.js';
+import { grantCoinpayPass } from './lib/pass.js';
 import { decideTier } from './lib/tier.js';
 import {
   Account,
@@ -546,6 +547,13 @@ app.get('/api/v1/coinpay/oauth/callback', async (c) => {
   } catch (err) {
     console.error(`[coinpay] sign-in refused: ${err?.code ?? 'error'}: ${err?.message ?? err}`);
     return fail(err?.code ?? 'failed');
+  }
+  // Profullstack Pass: seen only here, so an active one is the smallest top-up in
+  // free credits, once per pass, bound to the CoinPay sub (never the email).
+  try {
+    await grantCoinpayPass(q, { userId: out.user.id, sub: out.sub, pass: out.pass });
+  } catch (err) {
+    console.error(`[coinpay] pass grant failed: ${err?.message ?? err}`);
   }
   if (out.mode === 'link') {
     if (out.openprofileUrl) {
