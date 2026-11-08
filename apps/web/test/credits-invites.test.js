@@ -19,7 +19,7 @@ beforeAll(async () => {
   ({ app } = await import('../src/app.js'));
   credits = await import('../src/lib/credits.js');
   // The affiliates package makes its tables on first use; make them before truncating.
-  await credits.inviteSummary('00000000-0000-0000-0000-000000000000', 'https://bg0ne.com');
+  await credits.inviteSummary('00000000-0000-0000-0000-000000000000', 'https://bg0ne.pwa.pit.world');
 });
 
 beforeEach(async () => {
@@ -138,7 +138,7 @@ test('a code cannot be minted for nothing or for a monthly allowance', async () 
 /* ---------------------------------------------------------------- invites -- */
 
 async function inviteFrom(inviter) {
-  const made = await credits.createInvite(inviter.id, 'for a friend', 'https://bg0ne.com');
+  const made = await credits.createInvite(inviter.id, 'for a friend', 'https://bg0ne.pwa.pit.world');
   expect(made.ok).toBe(true);
   return made;
 }
@@ -146,7 +146,7 @@ async function inviteFrom(inviter) {
 test('an invite opened in another browser pays both sides once', async () => {
   const inviter = await oldUser('ada@acme.com');
   const { code, url } = await inviteFrom(inviter);
-  expect(url).toBe(`https://bg0ne.com/i/${code}`);
+  expect(url).toBe(`https://bg0ne.pwa.pit.world/i/${code}`);
 
   // The landing page: open past every gate, invite in a cookie and in the form.
   const landing = await app.request(`/i/${code.toLowerCase()}`);
@@ -184,7 +184,7 @@ test('an invite used by an existing account spends nothing', async () => {
   const { res } = await signInThroughLink('grace@other.org', { inviteCode: code });
   expect(res.headers.get('location')).toBe('/account');
   expect(await q.creditBalance(existing.id)).toBe(0);
-  expect((await credits.inviteSummary(inviter.id, 'https://bg0ne.com')).invites[0].used).toBe(
+  expect((await credits.inviteSummary(inviter.id, 'https://bg0ne.pwa.pit.world')).invites[0].used).toBe(
     false,
   );
 });
@@ -239,7 +239,7 @@ test('three invites each, then a 409', async () => {
 
 test('?ref= is first touch and recorded only for an account the link creates', async () => {
   const ada = await oldUser('ada@acme.com');
-  const { affiliate_code: ref } = await credits.inviteSummary(ada.id, 'https://bg0ne.com');
+  const { affiliate_code: ref } = await credits.inviteSummary(ada.id, 'https://bg0ne.pwa.pit.world');
   const visit = await app.request(`/pricing?ref=${ref}`);
   expect(visit.headers.get('set-cookie')).toContain(`referral_code=${ref}`);
 

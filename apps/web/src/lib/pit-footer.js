@@ -6,7 +6,7 @@
  * (3 s timeout, non-200, network) keeps serving the stale copy; until the first
  * fetch lands it is the empty string, so the page never breaks on it.
  */
-const URL = 'https://pit.world/snippets/footer.html?site=bg0ne.com';
+const URL = 'https://pit.world/snippets/footer.html?site=bg0ne.pwa.pit.world';
 const TTL_MS = 60 * 60 * 1000;
 
 let html = '';

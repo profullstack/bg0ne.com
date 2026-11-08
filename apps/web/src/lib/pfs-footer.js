@@ -11,7 +11,7 @@
 import { footerHtml, footerHtmlSync } from '@profullstack/footer';
 
 const options = {
-  site: 'https://bg0ne.com/',
+  site: 'https://bg0ne.pwa.pit.world/',
   links: [
     { label: 'Pricing', href: '/pricing' },
     { label: 'API', href: '/docs' },
