@@ -3,7 +3,7 @@
 **BG, gone.** Background removal that runs on open models, self-hosts in one
 container, and bills by the image instead of by the month.
 
-Live at [bg0ne.com](https://bg0ne.com). MIT licensed.
+Live at [bg0ne.com](https://bg0ne.pwa.pit.world). MIT licensed.
 
 ## What it is
 
