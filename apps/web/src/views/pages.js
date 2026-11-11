@@ -118,6 +118,7 @@ ${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
 <meta name="theme-color" content="#5b4bff">
 <style>${STYLE}</style>
 <script data-site="68d4a3fa-7b29-4939-b0cd-ab3289bad021" src="https://crawlproof.com/stats.js" async></script>
+<script type="module" data-webmcp src="https://cdn.jsdelivr.net/npm/@profullstack/webmcp@0/src/embed.js" data-pages="{&quot;pricing&quot;:&quot;/pricing&quot;,&quot;docs&quot;:&quot;/docs&quot;,&quot;sign_in&quot;:&quot;/signin&quot;,&quot;account&quot;:&quot;/account&quot;}"></script>
 </head>
 <body>
 <header><div class="wrap">
