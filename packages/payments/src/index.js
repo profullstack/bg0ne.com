@@ -78,6 +78,23 @@ export function paymentProperty() {
   return host;
 }
 
+/**
+ * Who CoinPay sees calling: `<site>[/<version>] (+https://<site>)`. Every fleet app
+ * runs on one host behind one address, so the runtime default (`Bun/1.4.4`) made
+ * them one caller in CoinPay's logs and throttle.
+ */
+function coinpayUserAgent() {
+  let host = '';
+  try {
+    host = paymentProperty();
+  } catch {
+    // Unconfigured: the call is about to fail anyway; say what we can.
+  }
+  const v = process.env.npm_package_version;
+  const version = v ? `/${v}` : '';
+  return host ? `${host}${version} (+https://${host})` : `profullstack-payments${version}`;
+}
+
 function hostOf(value) {
   const v = String(value).trim();
   if (!v) return '';
@@ -192,6 +209,7 @@ export async function createCheckout({
     method: 'POST',
     headers: {
       authorization: `Bearer ${coinpay.apiKey}`,
+      'user-agent': coinpayUserAgent(),
       'content-type': 'application/json',
     },
     body: JSON.stringify({
@@ -253,7 +271,7 @@ export async function getCheckoutSession(sessionId) {
   const { coinpay } = need();
   if (!/^cs_[A-Za-z0-9]+$/.test(String(sessionId ?? ''))) return null;
   const res = await fetch(`${baseUrlOf(coinpay)}/api/checkout/sessions/${sessionId}`, {
-    headers: { authorization: `Bearer ${coinpay.apiKey}` },
+    headers: { authorization: `Bearer ${coinpay.apiKey}`, 'user-agent': coinpayUserAgent() },
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) return null;
