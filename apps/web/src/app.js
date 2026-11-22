@@ -100,7 +100,7 @@ const gateway = config.x402.enabled
  * The crawl door: the fleet's day pass ($1 a day over x402, or any coin / PayPal through
  * CoinPay's hosted checkout on /crawl) for AI training crawlers, headless browsers and
  * SEO scrapers. People, verified Googlebot/Bingbot and the AI chat/search fetchers pass
- * through untouched; a signed-in session is never charged.
+ * through untouched; a signed-in session cookie spares only an odd browser string.
  *
  * Separate from the cutout gateway above, which prices HD cutouts for the throttle.
  */
@@ -115,8 +115,10 @@ export const crawlGateway =
         secret: `${config.x402.scopedKey}:crawl`,
         contact: 'mailto:anthony@profullstack.com',
         openPaths: [...OPEN_PATHS, ...UNMETERED_PATHS],
-        exempt: (request) =>
-          Boolean(request.headers.get('cookie')?.includes(config.session.cookie)),
+        // A session cookie that is merely present is a hint, never a pass
+        // (x402-gateway 0.18.3): it spares a signed-in reader's odd browser
+        // string, but GPTBot with a made-up cookie is still charged.
+        sessionCookie: config.session.cookie,
       })
     : null;
 if (crawlGateway) app.use('*', x402Gateway(crawlGateway));
