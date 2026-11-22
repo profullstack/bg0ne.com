@@ -17,6 +17,7 @@ import { createGateway } from '@profullstack/x402-gateway';
 import { x402Gateway } from '@profullstack/x402-gateway/hono';
 import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
+import { AUTH_GUARD_RULES, isAuthRoute } from './lib/auth-guards.js';
 import {
   acceptInvite,
   attributeRef,
@@ -140,7 +141,12 @@ app.use(
     limit: config.throttle.limit,
     windowSeconds: config.throttle.windowSeconds,
     openPaths: UNMETERED_PATHS,
-    exempt: (request) => Boolean(request.headers.get('cookie')?.includes(config.session.cookie)),
+    rules: AUTH_GUARD_RULES,
+    // A signed-in person is not metered, except on sign-in itself: the cookie check is a
+    // header anyone can write, so it must not skip the brute-force guards.
+    exempt: (request) =>
+      !isAuthRoute(request) &&
+      Boolean(request.headers.get('cookie')?.includes(config.session.cookie)),
   }),
 );
 
